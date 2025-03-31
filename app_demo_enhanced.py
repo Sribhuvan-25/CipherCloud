@@ -16,6 +16,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 import io
+import hashlib  # Add hashlib for SHA-256 hash computation
 
 # Constants
 API_BASE_URL = "http://localhost:8000/api/v1"  # Adjust as needed
@@ -480,6 +481,27 @@ def rotate_key_api(new_public_key_pem, token):
         if hasattr(e, 'response') and hasattr(e.response, 'json'):
             st.error(f"Error details: {e.response.json()}")
         return None
+
+# Add a helper function for computing hash chains
+def compute_hash_for_log_entry(prev_hash, log_data):
+    """
+    Compute the cryptographic hash for a log entry.
+    Uses SHA-256 to hash the previous hash concatenated with fields from the current entry.
+    """
+    # Handle None or empty values properly
+    prev_hash = prev_hash or "0" * 64  # Use 64 zeros for genesis entry
+    
+    # Build the data string in the correct order
+    # Format: timestamp + operation + user_id + file_id
+    data = f"{log_data['timestamp']}{log_data['operation']}{log_data['user_id']}"
+    
+    # Add file_id if it exists, otherwise use empty string
+    if 'file_id' in log_data and log_data['file_id']:
+        data += log_data['file_id']
+    
+    # Combine previous hash with data and compute SHA-256
+    hash_input = f"{prev_hash}{data}"
+    return hashlib.sha256(hash_input.encode()).hexdigest()
 
 # Session state initialization
 if 'logged_in' not in st.session_state:
@@ -1515,21 +1537,31 @@ for each file owned by the user:
         # Base timestamp for first entry
         timestamp_base = time.time() - (len(st.session_state.files) * 300)  
         
-        # Generate hash for first entry (special case)
-        prev_hash = "0" * 64  # Genesis hash for first entry
+        # Genesis hash for first entry
+        prev_hash = "0" * 64
         
         # Add user registration as first entry
-        audit_logs.append({
+        first_entry = {
             "id": 1,
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(timestamp_base - 600)),
             "user_id": st.session_state.user_id,
             "operation": "register",
             "details": "User registration",
-            "prev_hash": prev_hash,
-            "current_hash": "hash_1"  # Simplified for demo
-        })
+            "prev_hash": prev_hash
+        }
         
-        prev_hash = "hash_1"
+        # Compute hash for the first entry
+        log_data = {
+            'timestamp': first_entry['timestamp'],
+            'operation': first_entry['operation'],
+            'user_id': first_entry['user_id'],
+            'file_id': ''
+        }
+        first_entry["current_hash"] = compute_hash_for_log_entry(prev_hash, log_data)
+        audit_logs.append(first_entry)
+        
+        # Use the real hash for the next entry
+        prev_hash = first_entry["current_hash"]
         
         # Add file operations to audit log
         for i, file in enumerate(st.session_state.files):
@@ -1539,39 +1571,56 @@ for each file owned by the user:
             except:
                 file_timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(timestamp_base + (i * 300)))
             
-            current_hash = f"hash_{i+2}"
-            
-            # Upload operation
-            audit_logs.append({
+            # Create entry
+            entry = {
                 "id": len(audit_logs) + 1,
                 "timestamp": file_timestamp,
                 "user_id": st.session_state.user_id,
                 "operation": "upload",
                 "file_id": file["file_id"],
                 "details": f"File uploaded: {file['filename']}",
-                "prev_hash": prev_hash,
-                "current_hash": current_hash
-            })
+                "prev_hash": prev_hash
+            }
             
-            prev_hash = current_hash
+            # Compute hash for this entry
+            log_data = {
+                'timestamp': entry['timestamp'],
+                'operation': entry['operation'],
+                'user_id': entry['user_id'],
+                'file_id': entry['file_id']
+            }
+            entry["current_hash"] = compute_hash_for_log_entry(prev_hash, log_data)
+            audit_logs.append(entry)
+            
+            # Update prev_hash for next entry
+            prev_hash = entry["current_hash"]
         
         # Add real tracked download events
         for i, event in enumerate(st.session_state.audit_events):
             if event["operation"] in ["DOWNLOAD", "UPDATE", "DELETE"]:
-                current_hash = f"hash_{len(audit_logs)+1}"
-                
-                audit_logs.append({
+                # Create entry
+                entry = {
                     "id": len(audit_logs) + 1,
                     "timestamp": event["timestamp"],
                     "user_id": st.session_state.user_id,
                     "operation": event["operation"],
                     "file_id": event["file_id"],
                     "details": event["details"],
-                    "prev_hash": prev_hash,
-                    "current_hash": current_hash
-                })
+                    "prev_hash": prev_hash
+                }
                 
-                prev_hash = current_hash
+                # Compute hash for this entry
+                log_data = {
+                    'timestamp': entry['timestamp'],
+                    'operation': entry['operation'],
+                    'user_id': entry['user_id'],
+                    'file_id': entry['file_id']
+                }
+                entry["current_hash"] = compute_hash_for_log_entry(prev_hash, log_data)
+                audit_logs.append(entry)
+                
+                # Update prev_hash for next entry
+                prev_hash = entry["current_hash"]
         
         # Display audit log
         if audit_logs:
@@ -1648,31 +1697,172 @@ current_hash = sha256(data_string.encode()).hexdigest()
             
             # Verify integrity
             if st.button("Verify Audit Log Integrity"):
-                with st.spinner("Verifying hash chain integrity..."):
-                    # Simulate verification process with animation
+                with st.expander("🔒 Audit Log Verification Process", expanded=True):
+                    # Common progress tracker for all steps
                     progress_bar = st.progress(0)
                     status_text = st.empty()
                     
-                    status_text.write("Checking hash chain integrity...")
+                    # Step 1: Initialize verification
+                    st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
+                    st.subheader("Step 1: Initialize Verification Process")
+                    status_text.write("Starting hash chain verification...")
                     
-                    # Simulate verification of each entry
-                    for i, log in enumerate(audit_logs):
-                        progress = int((i + 1) / len(audit_logs) * 100)
-                        progress_bar.progress(progress)
-                        status_text.write(f"Verifying entry {i+1} of {len(audit_logs)}...")
-                        time.sleep(0.1)  # Just for visual effect
+                    total_entries = len(audit_logs)
+                    st.info(f"Total entries to verify: {total_entries}")
                     
-                    # Complete the progress
-                    progress_bar.progress(100)
-                    status_text.write("✅ Verification complete!")
+                    # Show the genesis entry (first entry)
+                    genesis_entry = audit_logs[0]
+                    st.markdown(f'<div class="key-box">Genesis Entry (ID: {genesis_entry["id"]})</div>', unsafe_allow_html=True)
+                    st.json({
+                        "timestamp": genesis_entry["timestamp"],
+                        "user_id": genesis_entry["user_id"],
+                        "operation": genesis_entry["operation"].upper(),
+                        "details": genesis_entry["details"],
+                        "prev_hash": genesis_entry["prev_hash"] or "0"*64,
+                        "current_hash": genesis_entry["current_hash"]
+                    })
                     
-                st.success("✅ Audit log integrity verified successfully!")
-                st.markdown("""
-                <div class="info-box">
-                The hash chain is intact and the audit log has not been tampered with.
-                All operations are cryptographically verifiable.
-                </div>
-                """, unsafe_allow_html=True)
+                    progress_bar.progress(10)
+                    time.sleep(0.5)  # Visual delay
+                    st.markdown('</div>', unsafe_allow_html=True)
+                    
+                    # Step 2: Verify hash chain
+                    st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
+                    st.subheader("Step 2: Verify Hash Chain Integrity")
+                    status_text.write("Verifying each entry in the chain...")
+                    
+                    # Track verification results
+                    verification_passed = True
+                    failures = []
+                    
+                    # Show verification process with sample entries
+                    sample_indices = [1]  # Start with the second entry (after genesis)
+                    
+                    # Add some samples from the middle and end if enough entries
+                    if total_entries > 5:
+                        sample_indices.append(total_entries // 2)  # Middle
+                        sample_indices.append(total_entries - 1)   # Last entry
+                    elif total_entries > 1:
+                        sample_indices.append(total_entries - 1)   # Last entry
+                    
+                    for sample_idx in sample_indices:
+                        if sample_idx < len(audit_logs):
+                            entry = audit_logs[sample_idx]
+                            prev_entry = audit_logs[sample_idx - 1]
+                            
+                            # Progress update
+                            prog_pct = 10 + (sample_idx / total_entries) * 60
+                            progress_bar.progress(int(prog_pct))
+                            status_text.write(f"Verifying entry {sample_idx+1} of {total_entries}...")
+                            
+                            # Display entry details
+                            st.markdown(f'<div class="data-box">Verifying Entry ID: {entry["id"]}</div>', unsafe_allow_html=True)
+                            
+                            # Show the hash computation process
+                            st.markdown("**Hash computation steps:**")
+                            
+                            # 1. Get previous hash
+                            st.code(f"""
+# Step 1: Get the previous entry's hash
+prev_hash = "{prev_entry['current_hash']}"
+                            """, language="python")
+                            
+                            # 2. Format the current entry data
+                            log_data = {
+                                'timestamp': entry['timestamp'],
+                                'operation': entry['operation'],
+                                'user_id': entry['user_id'],
+                                'file_id': entry.get('file_id', '')
+                            }
+                            
+                            # Show the data used for hash computation
+                            file_id_display = log_data['file_id'] if log_data['file_id'] else "(empty)"
+                            st.code(f"""
+# Step 2: Format data from current entry
+timestamp = "{log_data['timestamp']}"
+operation = "{log_data['operation']}"
+user_id = "{log_data['user_id']}"
+file_id = "{file_id_display}"
+
+# Combine fields in correct order
+data_string = timestamp + operation + user_id + file_id
+                            """, language="python")
+                            
+                            # 3. Combine with previous hash and compute new hash
+                            st.code(f"""
+# Step 3: Combine with previous hash and compute SHA-256
+hash_input = prev_hash + data_string
+computed_hash = hashlib.sha256(hash_input.encode()).hexdigest()
+                            """, language="python")
+                            
+                            # 4. Actually compute the hash and compare
+                            computed_hash = compute_hash_for_log_entry(prev_entry['current_hash'], log_data)
+                            matches = computed_hash == entry['current_hash']
+                            
+                            st.markdown("**Verification results:**")
+                            col1, col2 = st.columns(2)
+                            
+                            with col1:
+                                st.markdown('<div class="key-box">Computed Hash:</div>', unsafe_allow_html=True)
+                                st.code(f"{computed_hash[:16]}...{computed_hash[-16:]}", language="text")
+                                
+                            with col2:
+                                st.markdown('<div class="key-box">Stored Hash:</div>', unsafe_allow_html=True)
+                                st.code(f"{entry['current_hash'][:16]}...{entry['current_hash'][-16:]}", language="text")
+                                
+                            if matches:
+                                st.success("✅ Hashes match! Entry verified.")
+                            else:
+                                st.error("❌ Hash mismatch! Entry verification failed.")
+                                verification_passed = False
+                                failures.append(entry["id"])
+                                
+                                # Show detailed debugging info for mismatches - replace expander with collapsible section
+                                st.warning("Hash computation details:")
+                                st.json({
+                                    "prev_hash": prev_entry['current_hash'],
+                                    "timestamp": log_data['timestamp'],
+                                    "operation": log_data['operation'],
+                                    "user_id": log_data['user_id'],
+                                    "file_id": log_data['file_id'],
+                                    "data_string": f"{log_data['timestamp']}{log_data['operation']}{log_data['user_id']}{log_data['file_id']}",
+                                    "hash_input": f"{prev_entry['current_hash']}{log_data['timestamp']}{log_data['operation']}{log_data['user_id']}{log_data['file_id']}",
+                                    "computed_hash": computed_hash,
+                                    "stored_hash": entry['current_hash']
+                                })
+                            
+                            # Add a separator between samples
+                            if sample_idx != sample_indices[-1]:
+                                st.markdown("---")
+                    
+                    # Verify all entries, not just the samples
+                    status_text.write("Verifying all entries...")
+                    for i in range(1, len(audit_logs)):
+                        entry = audit_logs[i]
+                        prev_entry = audit_logs[i-1]
+                        
+                        # Compute hash for this entry
+                        log_data = {
+                            'timestamp': entry['timestamp'],
+                            'operation': entry['operation'],
+                            'user_id': entry['user_id'],
+                            'file_id': entry.get('file_id', '')
+                        }
+                        computed_hash = compute_hash_for_log_entry(prev_entry['current_hash'], log_data)
+                        
+                        # Check if hash matches
+                        if computed_hash != entry['current_hash'] and entry["id"] not in failures:
+                            verification_passed = False
+                            failures.append(entry["id"])
+                    
+                    # Show visual indicator for all other entries
+                    if verification_passed:
+                        st.success(f"All {total_entries} entries verified successfully!")
+                    else:
+                        st.error(f"Found {len(failures)} integrity failures out of {total_entries} entries")
+                    
+                    progress_bar.progress(70)
+                    st.markdown('</div>', unsafe_allow_html=True)
                 
                 # Show what happens if tampered
                 with st.expander("What if someone tampers with the audit log?"):
@@ -1701,7 +1891,7 @@ for i in range(1, len(audit_logs)):
         break
         
     # Verify the current hash is correct
-    computed_hash = compute_hash(current_log)
+    computed_hash = compute_hash_for_log_entry(current_log["prev_hash"], current_log)
     if computed_hash != current_log["current_hash"]:
         print(f"Invalid hash detected at entry {i+1}!")
         break
