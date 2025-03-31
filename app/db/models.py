@@ -197,4 +197,44 @@ class Database:
                 )
             except sqlite3.Error as e:
                 print(f"Database error: {str(e)}")
-                raise Exception(f"Failed to delete file metadata: {str(e)}") 
+                raise Exception(f"Failed to delete file metadata: {str(e)}")
+
+    async def update_wrapped_dek(self, file_id: str, wrapped_dek: bytes):
+        """Update wrapped data encryption key for a file"""
+        with self._get_connection() as conn:
+            try:
+                cursor = conn.execute(
+                    "SELECT file_id FROM files WHERE file_id = ?",
+                    (file_id,)
+                )
+                if not cursor.fetchone():
+                    raise ValueError(f"File {file_id} not found")
+                
+                conn.execute(
+                    "UPDATE files SET wrapped_dek = ? WHERE file_id = ?",
+                    (wrapped_dek, file_id)
+                )
+                return True
+            except sqlite3.Error as e:
+                print(f"Database error: {str(e)}")
+                raise Exception(f"Failed to update wrapped DEK: {str(e)}")
+        
+    async def update_file_metadata(self, file_id: str, metadata: dict):
+        """Update metadata for a file"""
+        with self._get_connection() as conn:
+            try:
+                cursor = conn.execute(
+                    "SELECT file_id FROM files WHERE file_id = ?",
+                    (file_id,)
+                )
+                if not cursor.fetchone():
+                    raise ValueError(f"File {file_id} not found")
+                
+                conn.execute(
+                    "UPDATE files SET metadata = ? WHERE file_id = ?",
+                    (json.dumps(metadata), file_id)
+                )
+                return True
+            except sqlite3.Error as e:
+                print(f"Database error: {str(e)}")
+                raise Exception(f"Failed to update file metadata: {str(e)}") 
