@@ -1,0 +1,41 @@
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment files
+.env
+.env.*
+
+# Database files
+*.db
+*.sqlite3
+*.sqlite
+storage/secure_storage.db
+
+# Encryption keys
+*.pem
+keys/
+
+# Results and output directories
+benchmark_results/
+security_results/
+
+# Storage directories
+storage/files/
+storage/logs/
+
+# Generated JSON files
+*.json
+[{"stmt":"SELECT * FROM audit_log;","hea.json
+
+# Log files
+*.log
+
+# OS specific files
+.DS_Store
+
+# Temporary directories
+tmp/
+temp/
+sqlite:/ 
