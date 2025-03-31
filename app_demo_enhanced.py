@@ -774,34 +774,33 @@ else:
             # Encryption process demonstration with status updates
             if st.button("Encrypt & Upload File"):
                 with st.expander("🔒 Encryption Process", expanded=True):
-                    col1, col2 = st.columns(2)
+                    # Common progress tracker for all steps
+                    progress_bar = st.progress(0)
+                    status_text = st.empty()
                     
-                    with col1:
-                        st.subheader("Client-Side Encryption")
-                        progress_bar = st.progress(0)
-                        status_text = st.empty()
-                        
-                        # Step 1: Generate data encryption key
-                        st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
-                        status_text.write("1️⃣ Generating Data Encryption Key (DEK)...")
-                        time.sleep(0.5)
-                        data_key = generate_data_encryption_key()
-                        
-                        st.code("""
+                    # Step 1: Generate data encryption key
+                    st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
+                    st.subheader("Step 1: Generate Data Encryption Key (DEK)")
+                    status_text.write("Generating Data Encryption Key (DEK)...")
+                    time.sleep(0.5)
+                    data_key = generate_data_encryption_key()
+                    
+                    st.code("""
 # Generate a random 256-bit AES key
 data_key = AESGCM.generate_key(bit_length=256)
-                        """, language="python")
-                        
-                        st.markdown(f'<div class="key-box">Generated DEK (hex): {data_key.hex()}</div>', unsafe_allow_html=True)
-                        progress_bar.progress(25)
-                        st.markdown('</div>', unsafe_allow_html=True)
-                        
-                        # Step 2: Encrypt the file
-                        st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
-                        status_text.write("2️⃣ Encrypting file with AES-GCM...")
-                        time.sleep(0.5)
-                        
-                        st.code("""
+                    """, language="python")
+                    
+                    st.markdown(f'<div class="key-box">Generated DEK (hex): {data_key.hex()}</div>', unsafe_allow_html=True)
+                    progress_bar.progress(20)
+                    st.markdown('</div>', unsafe_allow_html=True)
+                    
+                    # Step 2: Encrypt the file
+                    st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
+                    st.subheader("Step 2: Encrypt File with AES-GCM")
+                    status_text.write("Encrypting file with AES-GCM...")
+                    time.sleep(0.5)
+                    
+                    st.code("""
 # Initialize AES-GCM cipher with the DEK
 aesgcm = AESGCM(data_key)
 
@@ -810,21 +809,22 @@ nonce = os.urandom(12)
 
 # Encrypt the file
 ciphertext = aesgcm.encrypt(nonce, file_contents, None)
-                        """, language="python")
-                        
-                        encrypted_data = encrypt_file(data_key, file_contents)
-                        
-                        st.markdown(f'<div class="data-box">Nonce (hex): {encrypted_data["nonce"].hex()}</div>', unsafe_allow_html=True)
-                        st.markdown(f'<div class="cipher-box">Ciphertext (first 32 bytes): {encrypted_data["ciphertext"].hex()[:64]}...</div>', unsafe_allow_html=True)
-                        progress_bar.progress(50)
-                        st.markdown('</div>', unsafe_allow_html=True)
-                        
-                        # Step 3: Wrap the DEK with public key
-                        st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
-                        status_text.write("3️⃣ Wrapping DEK with RSA public key...")
-                        time.sleep(0.5)
-                        
-                        st.code("""
+                    """, language="python")
+                    
+                    encrypted_data = encrypt_file(data_key, file_contents)
+                    
+                    st.markdown(f'<div class="data-box">Nonce (hex): {encrypted_data["nonce"].hex()}</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="cipher-box">Ciphertext (first 32 bytes): {encrypted_data["ciphertext"].hex()[:64]}...</div>', unsafe_allow_html=True)
+                    progress_bar.progress(40)
+                    st.markdown('</div>', unsafe_allow_html=True)
+                    
+                    # Step 3: Wrap the DEK with public key
+                    st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
+                    st.subheader("Step 3: Wrap DEK with RSA Public Key")
+                    status_text.write("Wrapping DEK with RSA public key...")
+                    time.sleep(0.5)
+                    
+                    st.code("""
 # Load the public key from PEM format
 public_key = serialization.load_pem_public_key(public_key_pem)
 
@@ -837,92 +837,95 @@ wrapped_key = public_key.encrypt(
         label=None
     )
 )
-                        """, language="python")
-                        
-                        wrapped_key = wrap_key(st.session_state.public_key, data_key)
-                        
-                        st.markdown(f'<div class="cipher-box">Wrapped DEK (hex): {wrapped_key.hex()[:64]}...</div>', unsafe_allow_html=True)
-                        progress_bar.progress(75)
-                        st.markdown('</div>', unsafe_allow_html=True)
+                    """, language="python")
                     
-                    with col2:
-                        st.subheader("Server Storage Model")
+                    wrapped_key = wrap_key(st.session_state.public_key, data_key)
+                    
+                    st.markdown(f'<div class="cipher-box">Wrapped DEK (hex): {wrapped_key.hex()[:64]}...</div>', unsafe_allow_html=True)
+                    progress_bar.progress(60)
+                    st.markdown('</div>', unsafe_allow_html=True)
+
+                    # Step 4: Prepare data for server
+                    st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
+                    st.subheader("Step 4: Prepare Data for Server")
+                    status_text.write("Preparing data package for server...")
+                    
+                    # Combine nonce and ciphertext
+                    ciphertext_with_nonce = encrypted_data['nonce'] + encrypted_data['ciphertext']
+                    
+                    st.json({
+                        "encrypted_file": {
+                            "format": "nonce + ciphertext",
+                            "size": len(ciphertext_with_nonce),
+                            "preview": ciphertext_with_nonce.hex()[:32] + "..."
+                        },
+                        "wrapped_dek": {
+                            "format": "RSA-OAEP encrypted",
+                            "size": len(wrapped_key),
+                            "preview": wrapped_key.hex()[:32] + "..."
+                        },
+                        "metadata": {
+                            "filename": uploaded_file.name,
+                            "content_type": uploaded_file.type,
+                            "original_size": file_size
+                        }
+                    })
+                    
+                    progress_bar.progress(80)
+                    st.markdown('</div>', unsafe_allow_html=True)
+                    
+                    # Step 5: Upload to server
+                    st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
+                    st.subheader("Step 5: Upload to Server")
+                    status_text.write("Uploading to secure storage...")
+                    
+                    # Actual upload operation
+                    upload_result = upload_file_to_api(
+                        ciphertext_with_nonce,
+                        uploaded_file.name, 
+                        uploaded_file.type,
+                        wrapped_key,
+                        st.session_state.token
+                    )
+                    
+                    if upload_result and "file_id" in upload_result:
+                        file_id = upload_result["file_id"]
+                        progress_bar.progress(100)
+                        status_text.write("✅ Upload complete!")
                         
-                        st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
-                        st.write("📤 Data Sent to Server")
-                        
-                        # Combine nonce and ciphertext
-                        ciphertext_with_nonce = encrypted_data['nonce'] + encrypted_data['ciphertext']
-                        
+                        st.success(f"File uploaded successfully!")
                         st.json({
-                            "encrypted_file": {
-                                "format": "nonce + ciphertext",
-                                "size": len(ciphertext_with_nonce),
-                                "preview": ciphertext_with_nonce.hex()[:32] + "..."
-                            },
-                            "wrapped_dek": {
-                                "format": "RSA-OAEP encrypted",
-                                "size": len(wrapped_key),
-                                "preview": wrapped_key.hex()[:32] + "..."
-                            },
-                            "metadata": {
-                                "filename": uploaded_file.name,
-                                "content_type": uploaded_file.type,
-                                "original_size": file_size
-                            }
+                            "status": "success",
+                            "file_id": file_id,
+                            "server_response": upload_result
                         })
-                        st.markdown('</div>', unsafe_allow_html=True)
                         
-                        st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
-                        st.write("🔐 Security Properties")
-                        st.markdown("""
-                        - **Zero Knowledge**: Server can't decrypt the file or DEK
-                        - **Forward Secrecy**: Each file has a unique DEK
-                        - **Key Protection**: DEK is wrapped with 2048-bit RSA
-                        - **Data Integrity**: AES-GCM provides authenticated encryption
-                        """)
-                        st.markdown('</div>', unsafe_allow_html=True)
+                        # Store minimal information in session for UI display
+                        if 'files' not in st.session_state:
+                            st.session_state.files = []
                         
-                        # Step 4: Upload to server
-                        st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
-                        st.write("4️⃣ Uploading to server...")
-                        
-                        # Actual upload operation
-                        status_text.write("4️⃣ Uploading to secure storage...")
-                        upload_result = upload_file_to_api(
-                            ciphertext_with_nonce,
-                            uploaded_file.name, 
-                            uploaded_file.type,
-                            wrapped_key,
-                            st.session_state.token
-                        )
-                        
-                        if upload_result and "file_id" in upload_result:
-                            file_id = upload_result["file_id"]
-                            progress_bar.progress(100)
-                            status_text.write("✅ Upload complete!")
-                            
-                            st.success(f"File uploaded successfully!")
-                            st.json({
-                                "status": "success",
-                                "file_id": file_id,
-                                "server_response": upload_result
-                            })
-                            
-                            # Store minimal information in session for UI display
-                            if 'files' not in st.session_state:
-                                st.session_state.files = []
-                            
-                            st.session_state.files.append({
-                                'file_id': file_id,
-                                'filename': uploaded_file.name,
-                                'size': file_size,
-                                'upload_time': time.strftime("%Y-%m-%d %H:%M:%S"),
-                                'content_type': uploaded_file.type
-                            })
-                        else:
-                            st.error("Upload failed. See error details above.")
-                        
+                        st.session_state.files.append({
+                            'file_id': file_id,
+                            'filename': uploaded_file.name,
+                            'size': file_size,
+                            'upload_time': time.strftime("%Y-%m-%d %H:%M:%S"),
+                            'content_type': uploaded_file.type
+                        })
+                    else:
+                        st.error("Upload failed. See error details above.")
+                    st.markdown('</div>', unsafe_allow_html=True)
+                    
+                    # Security properties as bonus information - change from nested expander to section
+                    st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
+                    st.subheader("Security Properties")
+                    st.markdown("""
+                    - **Zero Knowledge**: Server can't decrypt the file or DEK
+                    - **Forward Secrecy**: Each file has a unique DEK
+                    - **Key Protection**: DEK is wrapped with 2048-bit RSA
+                    - **Data Integrity**: AES-GCM provides authenticated encryption
+                    """)
+                    st.markdown('</div>', unsafe_allow_html=True)
+                
                 if upload_result and "file_id" in upload_result:
                     st.success(f"File uploaded successfully with ID: {upload_result['file_id']}")
                     st.balloons()
@@ -1009,44 +1012,40 @@ wrapped_key = public_key.encrypt(
                 
                 if action == "download":
                     with st.expander("🔓 Decryption Process", expanded=True):
-                        col1, col2 = st.columns(2)
+                        # Common progress tracker for all steps
+                        progress_bar = st.progress(0)
+                        status_text = st.empty()
                         
-                        with col1:
-                            st.subheader("Server Response")
-                            progress_bar = st.progress(0)
-                            status_text = st.empty()
+                        # Step 1: Fetch from server
+                        st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
+                        st.subheader("Step 1: Retrieve Encrypted Data from Server")
+                        status_text.write("Retrieving encrypted data from server...")
+                        
+                        file_data = download_file_from_api(file["file_id"], st.session_state.token)
+                        
+                        if file_data:
+                            # Decode the data
+                            wrapped_dek = base64.b64decode(file_data["wrappedDEK"])
+                            ciphertext = base64.b64decode(file_data["ciphertext"])
                             
-                            # Step 1: Fetch from server
-                            st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
-                            status_text.write("1️⃣ Retrieving encrypted data from server...")
-                            
-                            file_data = download_file_from_api(file["file_id"], st.session_state.token)
-                            
-                            if file_data:
-                                # Decode the data
-                                wrapped_dek = base64.b64decode(file_data["wrappedDEK"])
-                                ciphertext = base64.b64decode(file_data["ciphertext"])
-                                
-                                st.json({
-                                    "wrapped_dek": wrapped_dek.hex()[:32] + "...",
-                                    "encrypted_file": ciphertext.hex()[:32] + "...",
-                                    "file_id": file["file_id"]
-                                })
-                                progress_bar.progress(30)
+                            st.json({
+                                "wrapped_dek": wrapped_dek.hex()[:32] + "...",
+                                "encrypted_file": ciphertext.hex()[:32] + "...",
+                                "file_id": file["file_id"]
+                            })
+                            progress_bar.progress(25)
                             st.markdown('</div>', unsafe_allow_html=True)
-                        
-                        with col2:
-                            if file_data:
-                                # Step 2: Unwrap the DEK
-                                st.subheader("Client-Side Decryption")
-                                st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
-                                status_text.write("2️⃣ Unwrapping DEK with private key...")
-                                
-                                # Extract nonce (first 12 bytes) and ciphertext
-                                nonce = ciphertext[:12]
-                                ciphertext_data = ciphertext[12:]
-                                
-                                st.code("""
+                            
+                            # Extract nonce (first 12 bytes) and ciphertext
+                            nonce = ciphertext[:12]
+                            ciphertext_data = ciphertext[12:]
+                            
+                            # Step 2: Unwrap the DEK
+                            st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
+                            st.subheader("Step 2: Unwrap DEK with Private Key")
+                            status_text.write("Unwrapping DEK with private key...")
+                            
+                            st.code("""
 # Unwrap the DEK using RSA-OAEP with private key
 private_key = serialization.load_pem_private_key(
     private_key_pem,
@@ -1061,55 +1060,65 @@ data_key = private_key.decrypt(
         label=None
     )
 )
-                                """, language="python")
-                                
-                                time.sleep(0.5)  # Visual delay
-                                data_key = unwrap_key(st.session_state.private_key, wrapped_dek)
-                                st.markdown(f'<div class="key-box">Unwrapped DEK (hex): {data_key.hex()}</div>', unsafe_allow_html=True)
-                                progress_bar.progress(60)
-                                st.markdown('</div>', unsafe_allow_html=True)
-                                
-                                # Step 3: Decrypt the file
-                                st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
-                                status_text.write("3️⃣ Decrypting file with DEK...")
-                                
-                                st.code("""
+                            """, language="python")
+                            
+                            time.sleep(0.5)  # Visual delay
+                            data_key = unwrap_key(st.session_state.private_key, wrapped_dek)
+                            st.markdown(f'<div class="key-box">Unwrapped DEK (hex): {data_key.hex()}</div>', unsafe_allow_html=True)
+                            progress_bar.progress(50)
+                            st.markdown('</div>', unsafe_allow_html=True)
+                            
+                            # Step 3: Decrypt the file
+                            st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
+                            st.subheader("Step 3: Decrypt File with DEK")
+                            status_text.write("Decrypting file with DEK...")
+                            
+                            st.code("""
 # Decrypt using AES-GCM
 aesgcm = AESGCM(data_key)
 plaintext = aesgcm.decrypt(nonce, ciphertext_data, None)
-                                """, language="python")
-                                
-                                time.sleep(0.5)  # Visual delay
-                                decrypted_data = decrypt_file(data_key, nonce, ciphertext_data)
-                                
-                                # Determine if text or binary and show preview
-                                try:
-                                    preview = decrypted_data[:200].decode('utf-8')
-                                    preview_type = "text"
-                                except UnicodeDecodeError:
-                                    preview = f"Binary data (first 32 bytes): {decrypted_data[:32].hex()}"
-                                    preview_type = "binary"
-                                
-                                progress_bar.progress(100)
-                                st.markdown(f'<div class="data-box">Decrypted Data Preview ({preview_type}):</div>', unsafe_allow_html=True)
-                                st.code(preview, language="text" if preview_type == "text" else None)
-                                st.markdown('</div>', unsafe_allow_html=True)
-                                
-                                # Offer download button
-                                download_decrypted_btn = st.download_button(
-                                    "📥 Download Decrypted File",
-                                    data=decrypted_data,
-                                    file_name=file["filename"],
-                                    mime=file["content_type"],
-                                    on_click=lambda: st.session_state.audit_events.append({
-                                        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-                                        "operation": "DOWNLOAD",
-                                        "file_id": file["file_id"],
-                                        "details": f"File downloaded: {file['filename']}"
-                                    })
-                                )
-                            else:
-                                st.error("Failed to download the file. See errors above.")
+                            """, language="python")
+                            
+                            time.sleep(0.5)  # Visual delay
+                            decrypted_data = decrypt_file(data_key, nonce, ciphertext_data)
+                            
+                            # Determine if text or binary and show preview
+                            try:
+                                preview = decrypted_data[:200].decode('utf-8')
+                                preview_type = "text"
+                            except UnicodeDecodeError:
+                                preview = f"Binary data (first 32 bytes): {decrypted_data[:32].hex()}"
+                                preview_type = "binary"
+                            
+                            progress_bar.progress(75)
+                            st.markdown(f'<div class="data-box">Decrypted Data Preview ({preview_type}):</div>', unsafe_allow_html=True)
+                            st.code(preview, language="text" if preview_type == "text" else None)
+                            st.markdown('</div>', unsafe_allow_html=True)
+                            
+                            # Step 4: Save the file
+                            st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
+                            st.subheader("Step 4: Save Decrypted File")
+                            status_text.write("Preparing file for download...")
+                            progress_bar.progress(100)
+                            
+                            # Offer download button
+                            download_decrypted_btn = st.download_button(
+                                "📥 Download Decrypted File",
+                                data=decrypted_data,
+                                file_name=file["filename"],
+                                mime=file["content_type"],
+                                on_click=lambda: st.session_state.audit_events.append({
+                                    "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                                    "operation": "DOWNLOAD",
+                                    "file_id": file["file_id"],
+                                    "details": f"File downloaded: {file['filename']}"
+                                })
+                            )
+                            
+                            st.success("✅ Decryption complete! Your file is ready to download.")
+                            st.markdown('</div>', unsafe_allow_html=True)
+                        else:
+                            st.error("Failed to download the file. See errors above.")
                     
                     # Back button
                     if st.button("⬅️ Back to File List", key="back_from_download"):
@@ -1130,95 +1139,100 @@ plaintext = aesgcm.decrypt(nonce, ciphertext_data, None)
                         new_file = st.file_uploader("Upload new version", key=f"new_version_{file['file_id']}")
                         
                         if new_file:
-                            col1, col2 = st.columns(2)
+                            # Get new file contents
+                            new_content = new_file.read()
                             
-                            with col1:
-                                st.subheader("Encryption Process")
-                                # Get new file contents
-                                new_content = new_file.read()
-                                
-                                # Generate new DEK
-                                st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
-                                st.write("1️⃣ Generating new Data Encryption Key (DEK)")
-                                new_dek = generate_data_encryption_key()
-                                st.markdown(f'<div class="key-box">New DEK (hex): {new_dek.hex()[:32]}...</div>', unsafe_allow_html=True)
-                                st.markdown('</div>', unsafe_allow_html=True)
-                                
-                                # Encrypt with new DEK
-                                st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
-                                st.write("2️⃣ Encrypting new version")
-                                encrypted_data = encrypt_file(new_dek, new_content)
-                                ciphertext_with_nonce = encrypted_data['nonce'] + encrypted_data['ciphertext']
-                                st.markdown(f'<div class="cipher-box">New ciphertext: {ciphertext_with_nonce.hex()[:32]}...</div>', unsafe_allow_html=True)
-                                st.markdown('</div>', unsafe_allow_html=True)
-                                
-                                # Wrap new DEK
-                                st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
-                                st.write("3️⃣ Wrapping new DEK with public key")
-                                wrapped_key = wrap_key(st.session_state.public_key, new_dek)
-                                st.markdown(f'<div class="cipher-box">Wrapped DEK: {wrapped_key.hex()[:32]}...</div>', unsafe_allow_html=True)
-                                st.markdown('</div>', unsafe_allow_html=True)
+                            # Common progress tracker for all steps
+                            progress_bar = st.progress(0)
+                            status_text = st.empty()
                             
-                            with col2:
-                                st.subheader("Server Update")
+                            # Step 1: Generate new DEK
+                            st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
+                            st.subheader("Step 1: Generate New Encryption Key")
+                            status_text.write("Generating new Data Encryption Key (DEK)...")
+                            new_dek = generate_data_encryption_key()
+                            st.markdown(f'<div class="key-box">New DEK (hex): {new_dek.hex()[:32]}...</div>', unsafe_allow_html=True)
+                            progress_bar.progress(20)
+                            st.markdown('</div>', unsafe_allow_html=True)
+                            
+                            # Step 2: Encrypt with new DEK
+                            st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
+                            st.subheader("Step 2: Encrypt New Version")
+                            status_text.write("Encrypting file with new key...")
+                            encrypted_data = encrypt_file(new_dek, new_content)
+                            ciphertext_with_nonce = encrypted_data['nonce'] + encrypted_data['ciphertext']
+                            st.markdown(f'<div class="cipher-box">New ciphertext: {ciphertext_with_nonce.hex()[:32]}...</div>', unsafe_allow_html=True)
+                            progress_bar.progress(40)
+                            st.markdown('</div>', unsafe_allow_html=True)
+                            
+                            # Step 3: Wrap new DEK
+                            st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
+                            st.subheader("Step 3: Wrap DEK with Public Key")
+                            status_text.write("Wrapping DEK with public key...")
+                            wrapped_key = wrap_key(st.session_state.public_key, new_dek)
+                            st.markdown(f'<div class="cipher-box">Wrapped DEK: {wrapped_key.hex()[:32]}...</div>', unsafe_allow_html=True)
+                            progress_bar.progress(60)
+                            st.markdown('</div>', unsafe_allow_html=True)
+                            
+                            # Step 4: Prepare data for server
+                            st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
+                            st.subheader("Step 4: Prepare Data for Server")
+                            status_text.write("Preparing data for server...")
+                            st.json({
+                                "file_id": file["file_id"],
+                                "new_encrypted_file": {
+                                    "size": len(ciphertext_with_nonce),
+                                    "preview": ciphertext_with_nonce.hex()[:32] + "..."
+                                },
+                                "new_wrapped_dek": wrapped_key.hex()[:32] + "...",
+                                "metadata": {
+                                    "filename": new_file.name,
+                                    "size": len(new_content)
+                                }
+                            })
+                            progress_bar.progress(80)
+                            st.markdown('</div>', unsafe_allow_html=True)
+                            
+                            # Step 5: Send update to server
+                            st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
+                            st.subheader("Step 5: Send Update to Server")
+                            
+                            if st.button("Confirm Update"):
+                                status_text.write("Uploading new version to server...")
                                 
-                                st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
-                                st.write("📤 Data sent to server:")
-                                st.json({
-                                    "file_id": file["file_id"],
-                                    "new_encrypted_file": {
-                                        "size": len(ciphertext_with_nonce),
-                                        "preview": ciphertext_with_nonce.hex()[:32] + "..."
-                                    },
-                                    "new_wrapped_dek": wrapped_key.hex()[:32] + "...",
-                                    "metadata": {
-                                        "filename": new_file.name,
-                                        "size": len(new_content)
-                                    }
-                                })
-                                st.markdown('</div>', unsafe_allow_html=True)
+                                update_result = update_file_in_api(
+                                    file["file_id"], 
+                                    ciphertext_with_nonce, 
+                                    new_file.name,
+                                    wrapped_key,
+                                    st.session_state.token
+                                )
                                 
-                                if st.button("Confirm Update"):
-                                    with st.spinner("Processing update..."):
-                                        progress_bar = st.progress(0)
-                                        status_text = st.empty()
-                                        
-                                        status_text.write("Uploading new version...")
-                                        progress_bar.progress(50)
-                                        
-                                        update_result = update_file_in_api(
-                                            file["file_id"], 
-                                            ciphertext_with_nonce, 
-                                            new_file.name,
-                                            wrapped_key,
-                                            st.session_state.token
-                                        )
-                                        
-                                        if update_result and update_result.get("status") == "success":
-                                            progress_bar.progress(100)
-                                            status_text.write("Update complete!")
-                                            
-                                            # Add update event to audit log
-                                            st.session_state.audit_events.append({
-                                                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-                                                "operation": "UPDATE",
-                                                "file_id": file["file_id"],
-                                                "details": f"File updated: {new_file.name}"
-                                            })
-                                            
-                                            # Update session state for display purposes
-                                            st.session_state.files[file_index].update({
-                                                'filename': new_file.name,
-                                                'size': len(new_content),
-                                                'upload_time': time.strftime("%Y-%m-%d %H:%M:%S"),
-                                                'content_type': new_file.type
-                                            })
-                                            
-                                            st.success(f"File {file['file_id']} updated successfully")
-                                            st.session_state.current_action = None
-                                            st.rerun()
-                                        else:
-                                            st.error("Failed to update the file. See errors above.")
+                                if update_result and update_result.get("status") == "success":
+                                    progress_bar.progress(100)
+                                    status_text.write("Update complete!")
+                                    
+                                    # Add update event to audit log
+                                    st.session_state.audit_events.append({
+                                        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                                        "operation": "UPDATE",
+                                        "file_id": file["file_id"],
+                                        "details": f"File updated: {new_file.name}"
+                                    })
+                                    
+                                    # Update session state for display purposes
+                                    st.session_state.files[file_index].update({
+                                        'filename': new_file.name,
+                                        'size': len(new_content),
+                                        'upload_time': time.strftime("%Y-%m-%d %H:%M:%S"),
+                                        'content_type': new_file.type
+                                    })
+                                    
+                                    st.success(f"File {file['file_id']} updated successfully")
+                                    st.session_state.current_action = None
+                                    st.rerun()
+                                else:
+                                    st.error("Failed to update the file. See errors above.")
                     
                     # Back button
                     if st.button("⬅️ Back to File List", key="back_from_update"):
@@ -1229,66 +1243,76 @@ plaintext = aesgcm.decrypt(nonce, ciphertext_data, None)
                     with st.expander("🗑️ Secure Deletion Process", expanded=True):
                         st.warning("Are you sure you want to delete this file? This cannot be undone.")
                         
-                        col1, col2 = st.columns(2)
+                        # Explanation of the process
+                        st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
+                        st.subheader("Deletion Process and Security")
+                        st.markdown("""
+                        When you delete a file:
+                        1. The encrypted file is removed from storage
+                        2. The wrapped DEK is deleted permanently
+                        3. Metadata is preserved in the audit log
+                        4. A deletion entry is added to the audit log
                         
-                        with col1:
-                            st.subheader("Deletion Process")
-                            st.markdown("""
-                            When you delete a file:
-                            1. The encrypted file is removed from storage
-                            2. The wrapped DEK is deleted permanently
-                            3. Metadata is preserved in the audit log
-                            4. A deletion entry is added to the audit log
-                            """)
+                        **Security Considerations:**
+                        - File content is irrecoverable after deletion
+                        - The audit log maintains a record of the deletion
+                        - The deletion is cryptographically linked in the hash chain
+                        - The file ID cannot be reused
+                        """)
+                        st.markdown('</div>', unsafe_allow_html=True)
                         
-                        with col2:
-                            st.subheader("Security Considerations")
-                            st.markdown("""
-                            - File content is irrecoverable after deletion
-                            - The audit log maintains a record of the deletion
-                            - The deletion is cryptographically linked in the hash chain
-                            - The file ID cannot be reused
-                            """)
-                            
-                        col1, col2 = st.columns(2)
-                        with col1:
+                        # Confirmation buttons
+                        cols = st.columns(2)
+                        with cols[0]:
                             if st.button("⬅️ Cancel", key="cancel_delete"):
                                 st.session_state.current_action = None
                                 st.rerun()
                                 
-                        with col2:
+                        with cols[1]:
                             if st.button("🗑️ Confirm Delete", key="confirm_delete"):
-                                with st.spinner("Deleting file..."):
-                                    progress_bar = st.progress(0)
-                                    status_text = st.empty()
+                                # Progress tracker
+                                progress_bar = st.progress(0)
+                                status_text = st.empty()
+                                
+                                # Step 1: Send deletion request
+                                st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
+                                st.subheader("Step 1: Request Deletion from Server")
+                                status_text.write("Removing file from server...")
+                                progress_bar.progress(30)
+                                
+                                delete_result = delete_file_from_api(file["file_id"], st.session_state.token)
+                                progress_bar.progress(60)
+                                
+                                if delete_result and delete_result.get("status") == "success":
+                                    # Step 2: Update audit log
+                                    st.subheader("Step 2: Record Deletion in Audit Log")
+                                    progress_bar.progress(80)
+                                    status_text.write("Recording deletion in audit log...")
                                     
-                                    status_text.write("Removing file from server...")
-                                    progress_bar.progress(30)
+                                    # Add deletion event to audit log
+                                    st.session_state.audit_events.append({
+                                        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                                        "operation": "DELETE",
+                                        "file_id": file["file_id"],
+                                        "details": f"File deleted: {file['filename']}"
+                                    })
                                     
-                                    delete_result = delete_file_from_api(file["file_id"], st.session_state.token)
-                                    progress_bar.progress(60)
+                                    # Step 3: Cleanup
+                                    progress_bar.progress(100)
+                                    status_text.write("Deletion complete!")
                                     
-                                    if delete_result and delete_result.get("status") == "success":
-                                        progress_bar.progress(100)
-                                        status_text.write("Deletion complete!")
-                                        
-                                        # Add deletion event to audit log
-                                        st.session_state.audit_events.append({
-                                            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-                                            "operation": "DELETE",
-                                            "file_id": file["file_id"],
-                                            "details": f"File deleted: {file['filename']}"
-                                        })
-                                        
-                                        # Remove from session state
-                                        st.session_state.files.pop(file_index)
-                                        
-                                        st.success(f"File {file['file_id']} deleted successfully")
-                                        time.sleep(1)  # Give time to read the success message
-                                        st.session_state.current_action = None
-                                        st.rerun()
-                                    else:
-                                        st.error("Failed to delete the file. See errors above.")
+                                    # Remove from session state
+                                    st.session_state.files.pop(file_index)
+                                    
+                                    st.success(f"File {file['file_id']} deleted successfully")
+                                    st.markdown('</div>', unsafe_allow_html=True)
+                                    
+                                    time.sleep(1)  # Give time to read the success message
+                                    st.session_state.current_action = None
+                                    st.rerun()
+                                else:
+                                    st.error("Failed to delete the file. See errors above.")
+                                    st.markdown('</div>', unsafe_allow_html=True)
                 
                 elif action == "view":
                     # Display file details
@@ -1337,19 +1361,17 @@ plaintext = aesgcm.decrypt(nonce, ciphertext_data, None)
             
             if st.button("Start Key Rotation"):
                 with st.expander("🔄 Key Rotation Process", expanded=True):
-                    col1, col2 = st.columns(2)
+                    # Common progress tracker for all steps
+                    progress_bar = st.progress(0)
+                    status_text = st.empty()
                     
-                    with col1:
-                        st.subheader("Client-Side Process")
-                        progress_bar = st.progress(0)
-                        status_text = st.empty()
-                        
-                        # Step 1: Generate new keypair
-                        st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
-                        status_text.write("1️⃣ Generating new RSA keypair...")
-                        time.sleep(0.5)
-                        
-                        st.code("""
+                    # Step 1: Generate new keypair
+                    st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
+                    st.subheader("Step 1: Generate New RSA Keypair")
+                    status_text.write("Generating new 2048-bit RSA keypair...")
+                    time.sleep(0.5)
+                    
+                    st.code("""
 # Generate new 2048-bit RSA keypair
 private_key = rsa.generate_private_key(
     public_exponent=65537,
@@ -1363,43 +1385,44 @@ pem_private = private_key.private_bytes(
     format=serialization.PrivateFormat.PKCS8,
     encryption_algorithm=serialization.NoEncryption()
 )
-                        """, language="python")
-                        
-                        new_private_key, new_public_key = generate_rsa_keypair()
-                        
-                        # Show only a preview of the keys
-                        st.markdown('<div class="key-box">New Private Key (preview):</div>', unsafe_allow_html=True)
-                        st.code(new_private_key[:100].decode() + "...", language="text")
-                        
-                        st.markdown('<div class="key-box">New Public Key:</div>', unsafe_allow_html=True)
-                        st.code(new_public_key[:100].decode() + "...", language="text")
-                        
-                        progress_bar.progress(30)
-                        st.markdown('</div>', unsafe_allow_html=True)
-                        
-                        # Step 2: Send public key to server
-                        st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
-                        status_text.write("2️⃣ Sending new public key to server...")
-                        
-                        st.code("""
+                    """, language="python")
+                    
+                    new_private_key, new_public_key = generate_rsa_keypair()
+                    
+                    # Show only a preview of the keys
+                    st.markdown('<div class="key-box">New Private Key (preview):</div>', unsafe_allow_html=True)
+                    st.code(new_private_key[:100].decode() + "...", language="text")
+                    
+                    st.markdown('<div class="key-box">New Public Key:</div>', unsafe_allow_html=True)
+                    st.code(new_public_key[:100].decode() + "...", language="text")
+                    
+                    progress_bar.progress(25)
+                    st.markdown('</div>', unsafe_allow_html=True)
+                    
+                    # Step 2: Send public key to server
+                    st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
+                    st.subheader("Step 2: Send Public Key to Server")
+                    status_text.write("Sending new public key to server...")
+                    
+                    st.code("""
 # Send new public key to server
 response = requests.post(
     f"{API_BASE_URL}/rotate-key",
     json={"new_public_key": base64.b64encode(new_public_key).decode()},
     headers={"Authorization": f"Bearer {token}"}
 )
-                        """, language="python")
-                        
-                        rotation_result = rotate_key_api(new_public_key, st.session_state.token)
-                        progress_bar.progress(60)
-                        st.markdown('</div>', unsafe_allow_html=True)
+                    """, language="python")
                     
-                    with col2:
-                        st.subheader("Server-Side Process")
-                        
-                        st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
-                        st.write("Key Rotation Steps on Server:")
-                        st.code("""
+                    rotation_result = rotate_key_api(new_public_key, st.session_state.token)
+                    progress_bar.progress(50)
+                    st.markdown('</div>', unsafe_allow_html=True)
+                    
+                    # Step 3: Server processes keys
+                    st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
+                    st.subheader("Step 3: Server Rekeys Files")
+                    status_text.write("Server is re-encrypting file keys...")
+                    
+                    st.code("""
 # Server-side pseudocode:
 for each file owned by the user:
     1. Retrieve the wrapped DEK
@@ -1407,51 +1430,52 @@ for each file owned by the user:
     3. Re-encrypt it with the user's new public key
     4. Update the stored wrapped DEK
     5. Update the user's public key in the database
-                        """, language="text")
-                        st.markdown('</div>', unsafe_allow_html=True)
+                    """, language="text")
+                    
+                    # Show simulated progress for server-side operations
+                    time.sleep(0.5)
+                    progress_bar.progress(75)
+                    st.markdown('</div>', unsafe_allow_html=True)
+                    
+                    # Step 4: Confirm rotation and update local keys 
+                    st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
+                    st.subheader("Step 4: Complete Key Rotation")
+                    status_text.write("Finalizing key rotation...")
+                    
+                    if rotation_result and rotation_result.get("status") == "success":
+                        st.json({
+                            "status": "success",
+                            "files_rekeyed": len(st.session_state.files),
+                            "user_id": st.session_state.user_id,
+                            "key_rotation_timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                            "old_key_retired": True
+                        })
                         
-                        # Step 3: Server response and verification
-                        st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
-                        if rotation_result and rotation_result.get("status") == "success":
-                            st.write("3️⃣ Server Confirmation")
-                            
-                            st.json({
-                                "status": "success",
-                                "files_rekeyed": len(st.session_state.files),
-                                "user_id": st.session_state.user_id,
-                                "key_rotation_timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-                                "old_key_retired": True
-                            })
-                            
-                            # Step 4: Update session with new keys
-                            progress_bar.progress(90)
-                            status_text.write("4️⃣ Updating local keys...")
-                            
-                            # Update session state
-                            st.session_state.private_key = new_private_key
-                            st.session_state.public_key = new_public_key
-                            
-                            progress_bar.progress(100)
-                            status_text.write("✅ Key rotation complete!")
-                            
-                            st.success("Keys have been successfully rotated!")
-                            
-                            st.warning("""
-                            ⚠️ **IMPORTANT**: Your private key has changed. Download your new private key 
-                            immediately and store it securely. If you lose this key, you will lose access to all your files.
-                            """)
-                            
-                            st.download_button(
-                                "Download New Private Key",
-                                data=new_private_key,
-                                file_name="new_private_key.pem",
-                                mime="application/x-pem-file"
-                            )
-                        else:
-                            st.error("Key rotation failed. See error details above.")
-                            if rotation_result:
-                                st.json(rotation_result)
-                        st.markdown('</div>', unsafe_allow_html=True)
+                        # Update session state
+                        st.session_state.private_key = new_private_key
+                        st.session_state.public_key = new_public_key
+                        
+                        progress_bar.progress(100)
+                        status_text.write("✅ Key rotation complete!")
+                        
+                        st.success("Keys have been successfully rotated!")
+                        
+                        st.warning("""
+                        ⚠️ **IMPORTANT**: Your private key has changed. Download your new private key 
+                        immediately and store it securely. If you lose this key, you will lose access to all your files.
+                        """)
+                        
+                        st.download_button(
+                            "Download New Private Key",
+                            data=new_private_key,
+                            file_name="new_private_key.pem",
+                            mime="application/x-pem-file"
+                        )
+                    else:
+                        st.error("Key rotation failed. See error details above.")
+                        if rotation_result:
+                            st.json(rotation_result)
+                    st.markdown('</div>', unsafe_allow_html=True)
     
     elif demo_page == "Audit Trail":
         st.markdown('<h1 class="main-header">Audit Trail Demo</h1>', unsafe_allow_html=True)
