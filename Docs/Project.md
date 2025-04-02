@@ -510,3 +510,200 @@ if __name__ == "__main__":
     # 2) upload_file(...)
     # 3) download_file(...)
     pass
+
+
+
+
+Server                                Client
+┌──────────────────┐                ┌──────────────────┐
+│ Generate random  │                │                  │
+│ challenge        │───Encrypted───▶│ Decrypt challenge│
+│                  │   challenge    │ using private    │
+│                  │                │ key              │
+│                  │                │                  │
+│ Verify signature │◀───Signed──────│ Sign decrypted   │
+│ with public key  │   response     │ challenge        │
+└──────────────────┘                └──────────────────┘
+
+
+
+
+┌──────────────────┐               
+│ Encrypted File   │ ← Encrypted with unique DEK (AES key)
+└──────────────────┘               
+                                  
+┌──────────────────┐               
+│ Wrapped DEK      │ ← DEK encrypted with user's public key
+└──────────────────┘               
+                
+┌──────────────────┐
+│ Private Key      │ ← Used to decrypt the wrapped DEK
+└──────────────────┘
+                
+┌──────────────────┐
+│ Unwrapped DEK    │ ← Used to decrypt the file
+└──────────────────┘
+
+
+
+
+
+┌─────────────────────────────────────┐               ┌─────────────────────────────────────┐
+│          CLIENT SIDE                │               │           SERVER SIDE               │
+│  ┌─────────────────────────────┐    │               │                                     │
+│  │   Streamlit Web Interface   │    │               │                                     │
+│  └─────────────────────────────┘    │               │                                     │
+│              │                      │               │                                     │
+│              ▼                      │               │                                     │
+│  ┌─────────────────────────────┐    │               │  ┌─────────────────────────────┐    │
+│  │  Encryption/Decryption      │    │  HTTPS        │  │      Flask API Layer        │    │
+│  │  Engine                     │◄───┼──────────────►│  │   (RESTful Endpoints)       │    │
+│  └─────────────────────────────┘    │  (Encrypted)  │  └─────────────────────────────┘    │
+│              │                      │  Communication│              │                      │
+│              ▼                      │               │              ▼                      │
+│  ┌─────────────────────────────┐    │               │  ┌─────────────────────────────┐    │
+│  │  Key Management             │    │               │  │     Authentication &         │   │
+│  │  - RSA Keypair              │    │               │  │     Access Control           │   │
+│  │  - DEK handling             │    │               │  └─────────────────────────────┘    │
+│  └─────────────────────────────┘    │               │              │                      │
+└─────────────────────────────────────┘               │              ▼                      │
+               ⎧                                      │  ┌─────────────────────────────┐    │
+               ⎪ SECURITY BOUNDARY                    │  │  File Metadata Management   │    │
+               ⎨ All plaintext data and keys          │  └─────────────────────────────┘    │
+               ⎪ remain on client side                │              │                      │
+               ⎩                                      │              ▼                      │
+                                                      │  ┌─────────────────────────────┐    │
+                                                      │  │  ┌───────────┐ ┌─────────┐  │    │
+                                                      │  │  │ Users DB  │ │Files DB │  │    │
+                                                      │  │  └───────────┘ └─────────┘  │    │
+                                                      │  │                             │    │
+                                                      │  │  ┌───────────────────────┐  │    │
+                                                      │  │  │     Audit Log DB      │  │    │
+                                                      │  │  └───────────────────────┘  │    │
+                                                      │  └─────────────────────────────┘    │
+                                                      │              │                      │
+                                                      │              ▼                      │
+                                                      │  ┌─────────────────────────────┐    │
+                                                      │  │ Encrypted File Storage      │    │
+                                                      │  └─────────────────────────────┘    │
+                                                      └─────────────────────────────────────┘
+                                                                       ⎧
+                                                                       ⎪ SECURITY BOUNDARY
+                                                                       ⎨ Server only handles
+                                                                       ⎪ encrypted data
+                                                                       ⎩
+
+
+
+
+
+
+┌───────────────────────────────┐                      ┌───────────────────────────────┐
+│  TRADITIONAL CLOUD STORAGE    │                      │  ZERO-KNOWLEDGE ARCHITECTURE  │
+└───────────────────────────────┘                      └───────────────────────────────┘
+
+┌───────────────────────────────┐                      ┌───────────────────────────────┐
+│         CLIENT                │                      │          CLIENT               │
+│                               │                      │                               │
+│  ┌─────────────┐              │                      │  ┌─────────────┐              │
+│  │    File     │              │                      │  │    File     │              │
+│  └─────────────┘              │                      │  └─────────────┘              │
+│        │                      │                      │        │                      │
+│        │                      │                      │        ▼                      │
+│        │                      │                      │  ┌─────────────┐              │
+│        │                      │                      │  │ ENCRYPTION  │              │
+│        │                      │                      │  │  with DEK   │              │
+│        │                      │                      │  └─────────────┘              │
+│        │                      │                      │        │                      │
+│        │                      │                      │        ▼                      │
+│        │                      │                      │  ┌─────────────┐              │
+│        │                      │                      │  │  DEK wrap   │              │
+│        │                      │                      │  │ with pub key│              │
+│        │                      │                      │  └─────────────┘              │
+│        ▼                      │                      │        │                      │
+│  [Password Auth]              │                      │        │                      │
+└───────────┬───────────────────┘                      └────────┬──────────────────────┘
+            │                                                   │
+            ▼                                                   ▼
+┌───────────────────────────────┐                      ┌───────────────────────────────┐
+│          SERVER               │                      │           SERVER              │
+│                               │                      │                               │
+│  ┌─────────────┐              │                      │                               │
+│  │ DECRYPTION  │◄─────┐       │                      │                               │
+│  │(Server has  │      │       │                      │  ┌─────────────┐              │
+│  │access to    │      │       │                      │  │ Store file  │              │
+│  │plaintext)   │      │       │                      │  │ (remains    │              │
+│  └─────────────┘      │       │                      │  │ encrypted)  │              │
+│        │              │       │                      │  └─────────────┘              │
+│        ▼              │       │                      │        │                      │
+│  ┌─────────────┐      │       │                      │        │                      │
+│  │Store file & │      │       │                      │        │                      │
+│  │user data    │      │       │                      │        │                      │
+│  └─────────────┘      │       │                      │        │                      │
+│        │              │       │                      │        │                      │
+│        ▼              │       │                      │        ▼                      │
+│  ┌─────────────┐      │       │                      │  ┌─────────────┐              │
+│  │ Data access │──────┘       │                      │  │ Wrapped DEK │              │
+│  │(plaintext)  │              │                      │  │ storage     │              │
+│  └─────────────┘              │                      │  └─────────────┘              │
+└───────────────────────────────┘                      └───────────────────────────────┘
+
+┌──────────────────────────────────────────────┐      ┌──────────────────────────────────────────────┐
+│ IN CASE OF SERVER BREACH:                    │      │ IN CASE OF SERVER BREACH:                    │
+│                                              │      │                                              │
+│ ⚠️ Attacker potentially gains:                │      │ ✓ Attacker only gets:                        │
+│   - Plaintext data                           │      │   - Encrypted files (unusable)               │
+│   - User credentials                         │      │   - Wrapped DEKs (protected by RSA)          │
+│   - Ability to decrypt future data           │      │   - Public keys (non-sensitive)              │
+└──────────────────────────────────────────────┘      └──────────────────────────────────────────────┘
+
+
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                CLIENT SIDE                                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────┐          ┌────────────────────┐          ┌────────────────────┐
+│      Step 1        │          │      Step 2        │          │      Step 3        │
+│                    │          │                    │          │                    │
+│  Request file from │          │ Receive encrypted  │          │ Extract wrapped    │
+│  server using file │───────►  │ file and metadata  │───────►  │ DEK from metadata  │
+│  ID and user token │          │ from server        │          │                    │
+└────────────────────┘          └────────────────────┘          └──────────┬─────────┘
+                                                                            │
+                                                                            ▼
+┌────────────────────┐          ┌────────────────────┐          ┌────────────────────┐
+│      Step 6        │          │      Step 5        │          │      Step 4        │
+│                    │          │                    │          │                    │
+│  Use unwrapped DEK │◄───────  │ DEK is now in its  │◄───────  │ Unwrap DEK using   │
+│  to decrypt file   │          │ original form      │          │ user's private key │
+│  contents          │          │                    │          │                    │
+└────────────────────┘          └────────────────────┘          └────────────────────┘
+          │
+          ▼
+┌────────────────────┐
+│      Step 7        │
+│                    │
+│  Display or save   │
+│  decrypted file    │
+│  for user          │
+└────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                SERVER SIDE                                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────┐          ┌────────────────────────────────────────┐
+│   Encrypted File Storage               │          │   Database                             │
+│                                        │          │                                        │
+│   a9f3b7c1d6... (encrypted content)    │◄────────►│   file_id: 123                         │
+│                                        │          │   owner_id: alice                      │
+│                                        │          │   wrapped_dek: x7y9z2... (encrypted)   │
+│                                        │          │   metadata: {filename, size, etc}      │
+└────────────────────────────────────────┘          └────────────────────────────────────────┘
+
+NOTE: The server never has access to:
+ - The user's private key
+ - The unwrapped DEK
+ - The plaintext file contents

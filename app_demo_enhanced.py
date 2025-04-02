@@ -268,13 +268,22 @@ def register_user(user_id, public_key_pem):
                 "public_key": base64.b64encode(public_key_pem).decode()
             }
         )
+        
+        # Check for conflict (UserID already exists)
+        if response.status_code == 409:
+            return response.json()  # Return the error with status and message
+        
+        # Handle other errors
         response.raise_for_status()
         return response.json()
     except requests.RequestException as e:
         st.error(f"Registration error: {str(e)}")
         if hasattr(e, 'response') and hasattr(e.response, 'json'):
-            st.error(f"Error details: {e.response.json()}")
-        return None
+            try:
+                return e.response.json()  # Return the error response
+            except:
+                pass
+        return {"status": "error", "message": str(e)}
 
 def login_user(user_id, private_key_pem):
     """Login user and get token using the challenge-based authentication"""
@@ -491,9 +500,14 @@ def compute_hash_for_log_entry(prev_hash, log_data):
     # Handle None or empty values properly
     prev_hash = prev_hash or "0" * 64  # Use 64 zeros for genesis entry
     
+    # Ensure timestamp is never empty
+    timestamp = log_data.get('timestamp') or time.strftime("%Y-%m-%d %H:%M:%S")
+    operation = log_data.get('operation', 'unknown')
+    user_id = log_data.get('user_id', 'unknown')
+    
     # Build the data string in the correct order
     # Format: timestamp + operation + user_id + file_id
-    data = f"{log_data['timestamp']}{log_data['operation']}{log_data['user_id']}"
+    data = f"{timestamp}{operation}{user_id}"
     
     # Add file_id if it exists, otherwise use empty string
     if 'file_id' in log_data and log_data['file_id']:
@@ -502,6 +516,23 @@ def compute_hash_for_log_entry(prev_hash, log_data):
     # Combine previous hash with data and compute SHA-256
     hash_input = f"{prev_hash}{data}"
     return hashlib.sha256(hash_input.encode()).hexdigest()
+
+def get_user_files(token):
+    """Fetch all files for the logged-in user from the API"""
+    try:
+        headers = {"Authorization": f"Bearer {token}"}
+        response = requests.get(f"{API_BASE_URL}/files", headers=headers)
+        response.raise_for_status()
+        
+        result = response.json()
+        if result.get("status") == "success" and "files" in result:
+            return result["files"]
+        return []
+    except requests.RequestException as e:
+        st.error(f"Error fetching files: {str(e)}")
+        if hasattr(e, 'response') and hasattr(e.response, 'json'):
+            st.error(f"Error details: {e.response.json()}")
+        return []
 
 # Session state initialization
 if 'logged_in' not in st.session_state:
@@ -543,36 +574,19 @@ with st.sidebar:
                 2. The server authenticates based on your user ID
                 3. All subsequent operations use your private key for decryption
                 4. Your private key never leaves your browser
+                
+                **Note:** If you've lost your private key, there is no recovery option. 
+                This is by design for security. You will need to register a new account.
                 """)
                 
-                key_option = st.radio("Private Key Option:", ["Upload Key", "Generate New Key"])
+                uploaded_key = st.file_uploader("Upload your private key", type=["pem"])
+                if uploaded_key:
+                    private_key_content = uploaded_key.read()
+                    st.markdown('<div class="key-box">Private Key Format: RSA PRIVATE KEY (PEM)</div>', unsafe_allow_html=True)
+                    st.code(f"Private Key (preview):\n{private_key_content[:100].decode()}...", language="text")
+                    st.session_state.private_key = private_key_content
                 
-                if key_option == "Upload Key":
-                    uploaded_key = st.file_uploader("Upload your private key", type=["pem"])
-                    if uploaded_key:
-                        private_key_content = uploaded_key.read()
-                        st.markdown('<div class="key-box">Private Key Format: RSA PRIVATE KEY (PEM)</div>', unsafe_allow_html=True)
-                        st.code(f"Private Key (preview):\n{private_key_content[:100].decode()}...", language="text")
-                        st.session_state.private_key = private_key_content
-                else:
-                    if st.button("Generate New Keypair"):
-                        with st.spinner("Generating new RSA keypair..."):
-                            private_key, public_key = generate_rsa_keypair()
-                            st.session_state.private_key = private_key
-                            st.session_state.public_key = public_key
-                            
-                            st.markdown('<div class="key-box">Private Key Format: RSA PRIVATE KEY (PEM)</div>', unsafe_allow_html=True)
-                            st.code(f"Private Key (preview):\n{private_key[:100].decode()}...", language="text")
-                            
-                            st.markdown('<div class="key-box">Public Key Format: PUBLIC KEY (PEM)</div>', unsafe_allow_html=True)
-                            st.code(f"Public Key (preview):\n{public_key[:100].decode()}...", language="text")
-                            
-                            st.download_button(
-                                "Download Private Key",
-                                data=private_key,
-                                file_name="private_key.pem",
-                                mime="application/x-pem-file"
-                            )
+                st.info("If you don't have a private key yet, please use the Register option instead.")
             
             if st.button("Login") and user_id and st.session_state.private_key:
                 with st.spinner("Authenticating..."):
@@ -601,6 +615,11 @@ with st.sidebar:
                                 format=serialization.PublicFormat.SubjectPublicKeyInfo
                             )
                             st.session_state.public_key = public_key_pem
+                            
+                            # Fetch user files after successful login
+                            with st.spinner("Loading your files..."):
+                                user_files = get_user_files(st.session_state.token)
+                                st.session_state.files = user_files
                             
                             st.success("Login successful!")
                             st.rerun()
@@ -679,25 +698,42 @@ pem_public = public_key.public_bytes(
             if st.button("Register") and user_id and st.session_state.public_key:
                 with st.spinner("Registering user..."):
                     # Register with the API
-                    registration_result = register_user(user_id, st.session_state.public_key)
-                    if registration_result and registration_result.get("status") == "success":
-                        st.success(f"User {user_id} registered successfully!")
+                    try:
+                        registration_result = register_user(user_id, st.session_state.public_key)
                         
-                        # Show what was sent to the server
-                        with st.expander("Registration Data Sent"):
-                            st.json({
-                                "user_id": user_id,
-                                "public_key": base64.b64encode(st.session_state.public_key).decode()[:30] + "..." # truncated for display
-                            })
-                        
-                        # Automatically login after registration
-                        login_result = login_user(user_id, st.session_state.private_key)
-                        if login_result and "access_token" in login_result:
-                            st.session_state.logged_in = True
-                            st.session_state.user_id = user_id
-                            st.session_state.token = login_result["access_token"]
-                            st.success("Logged in automatically!")
-                            st.rerun()
+                        # Check if registration was successful
+                        if registration_result and registration_result.get("status") == "success":
+                            st.success(f"User {user_id} registered successfully!")
+                            
+                            # Show what was sent to the server
+                            with st.expander("Registration Data Sent"):
+                                st.json({
+                                    "user_id": user_id,
+                                    "public_key": base64.b64encode(st.session_state.public_key).decode()[:30] + "..." # truncated for display
+                                })
+                            
+                            # Automatically login after registration
+                            login_result = login_user(user_id, st.session_state.private_key)
+                            if login_result and "access_token" in login_result:
+                                st.session_state.logged_in = True
+                                st.session_state.user_id = user_id
+                                st.session_state.token = login_result["access_token"]
+                                
+                                # Fetch user files after successful login
+                                with st.spinner("Loading your files..."):
+                                    user_files = get_user_files(st.session_state.token)
+                                    st.session_state.files = user_files
+                                    
+                                st.success("Logged in automatically!")
+                                st.rerun()
+                        elif registration_result and registration_result.get("status") == "error":
+                            # Display the error message from the server
+                            st.error(registration_result.get("message", "Registration failed"))
+                            # st.error("Registration failed. Please try again with a different UserID.")
+                        else:
+                            st.error("Registration failed. Please try again with a different UserID.")
+                    except Exception as e:
+                        st.error(f"Registration error: {str(e)}")
     else:
         st.success(f"Logged in as: {st.session_state.user_id}")
         
@@ -1611,10 +1647,10 @@ for each file owned by the user:
                 
                 # Compute hash for this entry
                 log_data = {
-                    'timestamp': entry['timestamp'],
+                    'timestamp': entry['timestamp'] or time.strftime("%Y-%m-%d %H:%M:%S"),  # Ensure timestamp isn't empty
                     'operation': entry['operation'],
                     'user_id': entry['user_id'],
-                    'file_id': entry['file_id']
+                    'file_id': entry.get('file_id', '')
                 }
                 entry["current_hash"] = compute_hash_for_log_entry(prev_hash, log_data)
                 audit_logs.append(entry)
@@ -1680,6 +1716,20 @@ for each file owned by the user:
                         with hash_cols[1]:
                             st.markdown(f"<div class='key-box'>Current Hash: {log['current_hash'][:16]}...</div>", unsafe_allow_html=True)
                             
+                        # Add detailed JSON representation of the entry
+                        st.markdown("### Complete Entry Data")
+                        st.json({
+                            "id": log["id"],
+                            "timestamp": log["timestamp"],
+                            "user_id": log["user_id"],
+                            "operation": log["operation"].upper(),
+                            "file_id": log.get("file_id", ""),
+                            "details": log.get("details", ""),
+                            "prev_hash": log["prev_hash"],
+                            "current_hash": log["current_hash"]
+                        })
+                        
+                        st.markdown("### Hash Computation")
                         st.code(f"""
 # Hash computation pseudocode:
 data_string = (
@@ -1745,15 +1795,16 @@ current_hash = sha256(data_string.encode()).hexdigest()
                     elif total_entries > 1:
                         sample_indices.append(total_entries - 1)   # Last entry
                     
+                    # Detailed verification for sample entries
                     for sample_idx in sample_indices:
                         if sample_idx < len(audit_logs):
                             entry = audit_logs[sample_idx]
                             prev_entry = audit_logs[sample_idx - 1]
                             
                             # Progress update
-                            prog_pct = 10 + (sample_idx / total_entries) * 60
+                            prog_pct = min(100, 10 + ((sample_idx / max(1, len(sample_indices))) * 40))
                             progress_bar.progress(int(prog_pct))
-                            status_text.write(f"Verifying entry {sample_idx+1} of {total_entries}...")
+                            status_text.write(f"Verifying sample entry {sample_idx+1} of {total_entries}...")
                             
                             # Display entry details
                             st.markdown(f'<div class="data-box">Verifying Entry ID: {entry["id"]}</div>', unsafe_allow_html=True)
@@ -1769,7 +1820,7 @@ prev_hash = "{prev_entry['current_hash']}"
                             
                             # 2. Format the current entry data
                             log_data = {
-                                'timestamp': entry['timestamp'],
+                                'timestamp': entry['timestamp'] or time.strftime("%Y-%m-%d %H:%M:%S"),  # Ensure timestamp isn't empty
                                 'operation': entry['operation'],
                                 'user_id': entry['user_id'],
                                 'file_id': entry.get('file_id', '')
@@ -1835,15 +1886,24 @@ computed_hash = hashlib.sha256(hash_input.encode()).hexdigest()
                             if sample_idx != sample_indices[-1]:
                                 st.markdown("---")
                     
-                    # Verify all entries, not just the samples
-                    status_text.write("Verifying all entries...")
+                    # Verify all entries in the background without showing details again
+                    status_text.write("Completing verification of all entries...")
+                    verification_progress = st.progress(0)
+                    
+                    # Start second phase of verification from 50%
+                    start_progress = 50
+                    
                     for i in range(1, len(audit_logs)):
+                        # Update progress for background verification
+                        progress_percent = min(100, start_progress + (i / max(1, len(audit_logs))) * (90 - start_progress))
+                        verification_progress.progress(int(progress_percent))
+                        
                         entry = audit_logs[i]
                         prev_entry = audit_logs[i-1]
                         
                         # Compute hash for this entry
                         log_data = {
-                            'timestamp': entry['timestamp'],
+                            'timestamp': entry['timestamp'] or time.strftime("%Y-%m-%d %H:%M:%S"),  # Ensure timestamp isn't empty
                             'operation': entry['operation'],
                             'user_id': entry['user_id'],
                             'file_id': entry.get('file_id', '')
@@ -1855,16 +1915,38 @@ computed_hash = hashlib.sha256(hash_input.encode()).hexdigest()
                             verification_passed = False
                             failures.append(entry["id"])
                     
-                    # Show visual indicator for all other entries
-                    if verification_passed:
-                        st.success(f"All {total_entries} entries verified successfully!")
-                    else:
-                        st.error(f"Found {len(failures)} integrity failures out of {total_entries} entries")
+                    # Final progress update
+                    verification_progress.progress(100)
+                    progress_bar.progress(90)
                     
-                    progress_bar.progress(70)
+                    # Show summary of verification results
+                    st.subheader("Step 3: Verification Summary")
+                    
+                    # Show final results
+                    if verification_passed:
+                        st.success(f"✅ All {total_entries} entries verified successfully! The audit log integrity is confirmed.")
+                        st.markdown("""
+                        <div class="info-box">
+                        The hash chain is intact and the audit log has not been tampered with. Each entry's hash 
+                        matches the expected value based on its contents and the previous entry's hash.
+                        </div>
+                        """, unsafe_allow_html=True)
+                    else:
+                        st.error(f"❌ Found {len(failures)} integrity failures among {total_entries} logs analyzed.")
+                        st.markdown(f"""
+                        <div class="error-message">
+                        Integrity verification failed for entries: {', '.join(str(f) for f in failures)}<br>
+                        This indicates possible tampering or corruption in the audit log.
+                        </div>
+                        """, unsafe_allow_html=True)
+                    
+                    progress_bar.progress(100)
                     st.markdown('</div>', unsafe_allow_html=True)
                 
-                # Show what happens if tampered
+                # End the main verification expander before showing the tamper explanation
+                
+                # Show what happens if tampered - now outside the main verification expander
+                st.subheader("Understanding Tampering Detection")
                 with st.expander("What if someone tampers with the audit log?"):
                     st.markdown("""
                     ### Detecting Tampering

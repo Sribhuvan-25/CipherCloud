@@ -237,4 +237,29 @@ class Database:
                 return True
             except sqlite3.Error as e:
                 print(f"Database error: {str(e)}")
-                raise Exception(f"Failed to update file metadata: {str(e)}") 
+                raise Exception(f"Failed to update file metadata: {str(e)}")
+
+    async def get_user_files(self, user_id: str) -> list:
+        """Retrieve all files owned by a user"""
+        with self._get_connection() as conn:
+            try:
+                cursor = conn.execute(
+                    """SELECT file_id, wrapped_dek, file_path, metadata 
+                       FROM files WHERE owner_id = ?""",
+                    (user_id,)
+                )
+                
+                files = []
+                for row in cursor.fetchall():
+                    files.append({
+                        'file_id': row[0],
+                        'wrapped_dek': row[1],
+                        'file_path': row[2],
+                        'metadata': json.loads(row[3] or '{}'),
+                        'owner_id': user_id
+                    })
+                
+                return files
+            except sqlite3.Error as e:
+                print(f"Database error: {str(e)}")
+                raise Exception(f"Failed to retrieve user files: {str(e)}") 

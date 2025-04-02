@@ -222,11 +222,17 @@ async def register_user(
         # Check if user exists
         existing_user = await db.get_user(registration.user_id)
         
-        # Store user data (will update if user exists)
+        # Prevent duplicate UserIDs - reject if the user already exists
+        if existing_user:
+            return JSONResponse(
+                status_code=409,  # Conflict status code
+                content={"status": "error", "message": f"UserID '{registration.user_id}' is already taken. Please choose another."}
+            )
+        
+        # Store user data (new users only)
         await db.store_user(registration.user_id, public_key_data)
         
-        message = "User updated successfully" if existing_user else "User registered successfully"
-        return {"status": "success", "message": message}
+        return {"status": "success", "message": "User registered successfully"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -630,3 +636,37 @@ async def get_user_public_key(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/files")
+async def list_files(
+    current_user: str = Depends(get_current_user),
+    db: Database = Depends(Database.get_instance),
+    audit_logger: AuditLogger = Depends(get_audit_logger)
+):
+    """
+    Retrieve a list of all files for the authenticated user.
+    """
+    try:
+        # Get files from database
+        files = await db.get_user_files(current_user)
+        
+        # Log the operation
+        await audit_logger.log_operation(
+            operation="list_files",
+            user_id=current_user
+        )
+        
+        # Return file list with metadata
+        file_list = []
+        for file in files:
+            file_list.append({
+                'file_id': file['file_id'],
+                'filename': file['metadata'].get('filename', 'Unnamed File'),
+                'size': file['metadata'].get('size', 0),
+                'content_type': file['metadata'].get('content_type', 'application/octet-stream'),
+                'upload_time': file['metadata'].get('upload_time', file.get('created_at', '')),
+            })
+        
+        return {"status": "success", "files": file_list}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list files: {str(e)}")
