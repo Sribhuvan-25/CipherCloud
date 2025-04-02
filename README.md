@@ -122,19 +122,6 @@ The demo UI will be available at http://localhost:8501
 - **Audit Trail**: View a tamper-evident log of all activities
 - **Integrity Verification**: Validate the security of your audit logs
 
-## Evaluation
-
-Run the evaluation script to test the system's security and performance:
-
-```bash
-python evaluate.py
-```
-
-This will:
-- Benchmark encryption/decryption performance
-- Verify audit log integrity
-- Calculate storage overhead
-
 ## Project Structure
 
 ```
@@ -157,9 +144,6 @@ secure-cloud-storage/
 - **Client-Side Security**: All encryption/decryption happens in the client's browser
 - **No Key Recovery**: If a private key is lost, encrypted data cannot be recovered
 
-## License
-
-[MIT License](LICENSE)
 
 ## Acknowledgements
 
