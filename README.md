@@ -62,21 +62,9 @@ The system uses a hybrid cryptographic approach, combining RSA for key protectio
    cd secure-cloud-storage
    ```
 
-2. Create and activate a virtual environment:
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows, use: venv\Scripts\activate
-   ```
-
-3. Install dependencies:
+2. Install dependencies:
    ```bash
    pip install -r requirements.txt
-   ```
-
-4. Configure environment (optional):
-   ```bash
-   cp .env.example .env
-   # Edit the .env file with your settings
    ```
 
 ## Running the Application
@@ -86,7 +74,7 @@ The system uses a hybrid cryptographic approach, combining RSA for key protectio
 Start the FastAPI server:
 
 ```bash
-uvicorn app.main:app --reload --port 8000
+python main.py
 ```
 
 The API server will be available at http://localhost:8000
@@ -131,9 +119,9 @@ secure-cloud-storage/
 │   ├── core/               # Core functionality
 │   ├── db/                 # Database models
 │   └── main.py             # FastAPI application entry point
-├── tests/                  # Test suite
+├── Tests/                  # Test suite
+├── main.py                 # FastAPI application entry point             
 ├── app_demo.py             # Streamlit demo UI
-├── evaluate.py             # Performance and security evaluation
 ├── requirements.txt        # Project dependencies
 └── README.md               # This file
 ```
