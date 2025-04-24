@@ -1,19 +1,18 @@
 # API Server Dependencies
-fastapi==0.104.1
-uvicorn==0.23.2
-pydantic==2.4.2
-python-jose==3.3.0
+fastapi==0.115.8
+uvicorn==0.34.0
+pydantic==2.10.6
+python-jose==3.4.0
 passlib==1.7.4
-python-multipart==0.0.6
+python-multipart==0.0.20
 bcrypt==4.0.1
-sqlalchemy==2.0.22
+sqlalchemy==2.0.38
 
 # Demo UI Dependencies
-streamlit==1.27.2
-streamlit-aggrid==0.3.4
+streamlit==1.44.0
 
 # Cryptography
-cryptography==41.0.4
+cryptography==39.0.0
 pycryptodome==3.19.0
 
 # Database
@@ -21,18 +20,15 @@ sqlalchemy-utils==0.41.1
 aiosqlite==0.19.0
 
 # Utilities
-python-dotenv==1.0.0
-requests==2.31.0
-pandas==2.1.1
-matplotlib==3.8.0
+python-dotenv==1.0.1
+requests==2.32.3
+pandas==2.2.1
+matplotlib==3.7.1
 
 # Testing
 pytest==7.4.2
 pytest-asyncio==0.21.1
-httpx==0.25.0
-
-# Documentation
-pydoc-markdown==4.8.2
+httpx==0.28.1
 
 # Development dependencies
 black==21.9b0
@@ -40,17 +36,6 @@ flake8==3.9.2
 mypy==0.910
 gunicorn==20.1.0
 
-# Optional dependencies
-python-dotenv==0.19.0
-gunicorn==20.1.0
-
-# New dependencies
-uvicorn>=0.15.0
-python-multipart>=0.0.5
-python-jose[cryptography]>=3.3.0
-sqlalchemy>=1.4.23
-pydantic>=1.8.2
-loguru>=0.5.3
-passlib[bcrypt]>=1.7.4
-bcrypt>=3.2.0
-aiofiles>=0.7.0 
+# Additional dependencies
+aiofiles==24.1.0
+starlette==0.45.3 

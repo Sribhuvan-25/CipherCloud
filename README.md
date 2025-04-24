@@ -69,6 +69,19 @@ The system uses a hybrid cryptographic approach, combining RSA for key protectio
 
 ## Running the Application
 
+### Environment Setup
+
+1. Create and activate a conda environment:
+   ```bash
+   conda create -n secure-cloud python=3.8
+   conda activate secure-cloud
+   ```
+
+2. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
 ### API Server
 
 Start the FastAPI server:
