@@ -15,6 +15,12 @@ from ..utils.crypto import (
     unwrap_key_with_rsa
 )
 
+"""
+app_demo.py does exactly the same thing as this file. Without using this class. This was built later and didn't have enough 
+time to refactor the code. But the functionality is the same in app_demo.py. of client side encryption even though this class is not used.
+
+"""
+
 class SecureCloudClient:
     def __init__(self, base_url: str, user_id: str):
         self.base_url = base_url.rstrip('/')
