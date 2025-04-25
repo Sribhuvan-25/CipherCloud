@@ -364,6 +364,9 @@ async def update_file(
         if not file_data or file_data["owner_id"] != current_user:
             raise HTTPException(status_code=404, detail="File not found or access denied")
 
+        # Get the old filename before updating
+        old_filename = file_data["metadata"].get("filename", "unknown")
+
         # Update file content
         new_contents = await new_file.read()
         async with aiofiles.open(file_data["file_path"], mode='wb') as f:
@@ -399,11 +402,16 @@ async def update_file(
             # Log the error but don't fail the whole update
             logging.error(f"Failed to update metadata: {str(e)}")
 
-        # Log operation
+        # Log operation with detailed information about the file change
         await audit_logger.log_operation(
             operation="update",
             user_id=current_user,
-            file_id=file_id
+            file_id=file_id,
+            details={
+                "old_filename": old_filename,
+                "new_filename": new_file.filename,
+                "action": "File updated"
+            }
         )
 
         return {"status": "success", "message": "File updated successfully"}

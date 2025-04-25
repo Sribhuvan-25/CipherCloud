@@ -1,7 +1,7 @@
 import sqlite3
 import json
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from pathlib import Path
 
 class Database:
@@ -13,7 +13,6 @@ class Database:
             raise RuntimeError("Use get_instance() instead")
         
         self.db_path = db_path
-        # Ensure the storage directory exists
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
 
@@ -111,7 +110,7 @@ class Database:
                 "SELECT current_hash FROM audit_log ORDER BY timestamp DESC LIMIT 1"
             )
             row = cursor.fetchone()
-            return row[0] if row else "0" * 64  # Return 64 zeros if no previous hash
+            return row[0] if row else "0" * 64
 
     async def append_audit_log(
         self,
@@ -262,4 +261,26 @@ class Database:
                 return files
             except sqlite3.Error as e:
                 print(f"Database error: {str(e)}")
-                raise Exception(f"Failed to retrieve user files: {str(e)}") 
+                raise Exception(f"Failed to retrieve user files: {str(e)}")
+
+    async def get_user_audit_logs(self, user_id: str) -> List[Dict[str, Any]]:
+        """Retrieve all audit log entries for a user"""
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                """SELECT id, timestamp, operation, file_id, prev_hash, 
+                          current_hash, details
+                   FROM audit_log 
+                   WHERE user_id = ?
+                   ORDER BY timestamp""",
+                (user_id,)
+            )
+            rows = cursor.fetchall()
+            return [{
+                'id': row[0],
+                'timestamp': row[1],
+                'operation': row[2],
+                'file_id': row[3],
+                'prev_hash': row[4],
+                'current_hash': row[5],
+                'details': json.loads(row[6]) if row[6] else None
+            } for row in rows] 
