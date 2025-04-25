@@ -40,10 +40,42 @@ The system uses a hybrid cryptographic approach, combining RSA for key protectio
    - Client uses private key to unwrap (decrypt) the DEK
    - File is decrypted using the DEK
 
-3. **Key Rotation**:
+3. **Update Process**:
+   - Client generates new DEK for the updated file
+   - New file content is encrypted with the new DEK
+   - New DEK is wrapped with user's public key
+   - Server replaces old file while preserving file ID
+   - Update operation is recorded in audit log
+
+4. **Delete Process**:
+   - Server removes encrypted file from storage
+   - Wrapped DEK is deleted permanently
+   - Metadata is preserved in audit log
+   - Deletion entry is added to audit log
+   - File ID cannot be reused
+
+5. **Key Rotation**:
    - User generates new RSA key pair
    - Server re-encrypts all DEKs with new public key
    - User must save new private key
+
+### Authentication
+
+The system uses a challenge-response mechanism for secure user authentication:
+
+1. **Login Process**:
+   - User requests a challenge from the server
+   - Server generates random challenge and encrypts it with user's public key
+   - Client decrypts challenge using private key
+   - Client signs challenge with private key
+   - Server verifies signature using public key
+   - If verification succeeds, access token is granted
+
+2. **Security Features**:
+   - Challenge-response prevents replay attacks
+   - Private key possession is verified without transmission
+   - All authentication attempts are logged in audit trail
+   - Failed attempts are recorded for security monitoring
 
 ## Installation
 
@@ -128,15 +160,17 @@ The demo UI will be available at http://localhost:8501
 ```
 secure-cloud-storage/
 ├── app/                    # Main application code
-│   ├── api/                # API endpoints
-│   ├── core/               # Core functionality
-│   ├── db/                 # Database models
+│   ├── api/                # API endpoints and route handlers
+│   ├── core/               # Core functionality and configuration
+│   ├── db/                 # Database models and operations
+│   ├── client/             # Client-side implementation and secure operations
+│   ├── utils/              # Utility functions for crypto and logging
 │   └── main.py             # FastAPI application entry point
-├── Tests/                  # Test suite
+├── Tests/                  # Test suite for system verification
 ├── main.py                 # FastAPI application entry point             
-├── app_demo.py             # Streamlit demo UI
-├── requirements.txt        # Project dependencies
-└── README.md               # This file
+├── app_demo.py             # Streamlit demo UI for interactive testing
+├── requirements.txt        # Project dependencies and versions
+└── README.md               # Project documentation and setup guide
 ```
 
 ## Security Considerations
