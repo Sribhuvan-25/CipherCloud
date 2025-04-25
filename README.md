@@ -166,7 +166,6 @@ secure-cloud-storage/
 │   ├── client/             # Client-side implementation and secure operations
 │   ├── utils/              # Utility functions for crypto and logging
 │   └── main.py             # FastAPI application entry point
-├── Tests/                  # Test suite for system verification
 ├── main.py                 # FastAPI application entry point             
 ├── app_demo.py             # Streamlit demo UI for interactive testing
 ├── requirements.txt        # Project dependencies and versions
