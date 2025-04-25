@@ -16,12 +16,11 @@ from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 import io
-import hashlib  # Add hashlib for SHA-256 hash computation
+import hashlib
 
 # Constants
-API_BASE_URL = "http://localhost:8000/api/v1"  # Adjust as needed
+API_BASE_URL = "http://localhost:8000/api/v1"
 
-# Set page configuration
 st.set_page_config(
     page_title="Secure Cloud Storage Demo",
     page_icon="🔒",
@@ -29,7 +28,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Fix for text visibility in dark theme
 st.markdown("""
 <style>
     [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p,
@@ -63,7 +61,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Define CSS
 st.markdown("""
 <style>
     .main-header {
@@ -269,9 +266,8 @@ def register_user(user_id, public_key_pem):
             }
         )
         
-        # Check for conflict (UserID already exists)
         if response.status_code == 409:
-            return response.json()  # Return the error with status and message
+            return response.json()
         
         # Handle other errors
         response.raise_for_status()
@@ -288,7 +284,6 @@ def register_user(user_id, public_key_pem):
 def login_user(user_id, private_key_pem):
     """Login user and get token using the challenge-based authentication"""
     try:
-        # Step 1: Request a challenge for this user
         challenge_response = requests.post(
             f"{API_BASE_URL}/verify-key/challenge",
             json={"user_id": user_id}
@@ -302,15 +297,12 @@ def login_user(user_id, private_key_pem):
         challenge_id = challenge_data["challenge_id"]
         encrypted_challenge_b64 = challenge_data["encrypted_challenge"]
         
-        # Step 2: Decrypt the challenge with the private key
         try:
-            # Load the private key
             private_key = serialization.load_pem_private_key(
                 private_key_pem,
                 password=None
             )
             
-            # Decrypt the challenge
             encrypted_challenge = base64.b64decode(encrypted_challenge_b64)
             decrypted_challenge = private_key.decrypt(
                 encrypted_challenge,
@@ -321,7 +313,6 @@ def login_user(user_id, private_key_pem):
                 )
             ).decode()
             
-            # Step 3: Sign the challenge with the private key
             signature = private_key.sign(
                 decrypted_challenge.encode(),
                 padding.PSS(
@@ -331,15 +322,13 @@ def login_user(user_id, private_key_pem):
                 hashes.SHA256()
             )
             
-            # Step 4: Send the signature as the password
             auth_data = f"{challenge_id}:{base64.b64encode(signature).decode()}"
             
-            # Step 5: Request the token with the challenge ID and signature
             response = requests.post(
                 f"{API_BASE_URL}/token",
                 data={
                     "username": user_id,
-                    "password": auth_data  # Using the password field to send challenge signature
+                    "password": auth_data
                 }
             )
             
@@ -364,20 +353,17 @@ def verify_private_key(private_key_pem, user_id):
     The actual cryptographic verification will happen during the login process.
     """
     try:
-        # Just verify we can load the private key without errors
         private_key = serialization.load_pem_private_key(
             private_key_pem,
             password=None
         )
         
-        # Also derive the public key as a basic check
         derived_public_key = private_key.public_key()
         derived_public_key_pem = derived_public_key.public_bytes(
             encoding=serialization.Encoding.PEM,
             format=serialization.PublicFormat.SubjectPublicKeyInfo
         )
         
-        # If we got here, the key is at least well-formed
         st.info("Private key is well-formed. Proceeding with login authentication.")
         return True
     
@@ -390,7 +376,6 @@ def upload_file_to_api(file_contents, filename, content_type, wrapped_dek, token
     try:
         headers = {"Authorization": f"Bearer {token}"}
         
-        # Prepare file and metadata
         files = {
             'file': (filename, file_contents, content_type)
         }
@@ -491,29 +476,23 @@ def rotate_key_api(new_public_key_pem, token):
             st.error(f"Error details: {e.response.json()}")
         return None
 
-# Add a helper function for computing hash chains
 def compute_hash_for_log_entry(prev_hash, log_data):
     """
     Compute the cryptographic hash for a log entry.
     Uses SHA-256 to hash the previous hash concatenated with fields from the current entry.
     """
-    # Handle None or empty values properly
-    prev_hash = prev_hash or "0" * 64  # Use 64 zeros for genesis entry
+    prev_hash = prev_hash or "0" * 64
     
     # Ensure timestamp is never empty
     timestamp = log_data.get('timestamp') or time.strftime("%Y-%m-%d %H:%M:%S")
     operation = log_data.get('operation', 'unknown')
     user_id = log_data.get('user_id', 'unknown')
-    
-    # Build the data string in the correct order
-    # Format: timestamp + operation + user_id + file_id
+
     data = f"{timestamp}{operation}{user_id}"
     
-    # Add file_id if it exists, otherwise use empty string
     if 'file_id' in log_data and log_data['file_id']:
         data += log_data['file_id']
     
-    # Combine previous hash with data and compute SHA-256
     hash_input = f"{prev_hash}{data}"
     return hashlib.sha256(hash_input.encode()).hexdigest()
 
@@ -554,7 +533,6 @@ if 'current_action' not in st.session_state:
 if 'audit_events' not in st.session_state:
     st.session_state.audit_events = []
 
-# Sidebar for authentication
 with st.sidebar:
     st.title("🔒 Secure Cloud Storage")
     st.markdown("---")
@@ -590,21 +568,18 @@ with st.sidebar:
             
             if st.button("Login") and user_id and st.session_state.private_key:
                 with st.spinner("Authenticating..."):
-                    # First verify the private key
                     key_valid = verify_private_key(st.session_state.private_key, user_id)
                     
                     if not key_valid:
                         st.error("Authentication failed: Invalid private key for this user.")
                         st.warning("The private key you provided does not match the one registered for this user.")
                     else:
-                        # Call the API to login
                         login_result = login_user(user_id, st.session_state.private_key)
                         if login_result and "access_token" in login_result:
                             st.session_state.logged_in = True
                             st.session_state.user_id = user_id
                             st.session_state.token = login_result["access_token"]
                             
-                            # Also derive and store the public key
                             private_key = serialization.load_pem_private_key(
                                 st.session_state.private_key,
                                 password=None
@@ -616,7 +591,6 @@ with st.sidebar:
                             )
                             st.session_state.public_key = public_key_pem
                             
-                            # Fetch user files after successful login
                             with st.spinner("Loading your files..."):
                                 user_files = get_user_files(st.session_state.token)
                                 st.session_state.files = user_files
@@ -633,7 +607,6 @@ with st.sidebar:
                     st.write("### RSA Keypair Generation")
                     progress = st.progress(0)
                     
-                    # Step 1: Generate keypair
                     st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
                     st.write("1️⃣ Generating 2048-bit RSA keypair...")
                     st.code("""
@@ -647,7 +620,6 @@ public_key = private_key.public_key()
                     progress.progress(30)
                     st.markdown('</div>', unsafe_allow_html=True)
                     
-                    # Step 2: Serialize keys
                     st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
                     st.write("2️⃣ Serializing keys to PEM format...")
                     st.code("""
@@ -667,12 +639,10 @@ pem_public = public_key.public_bytes(
                     progress.progress(60)
                     st.markdown('</div>', unsafe_allow_html=True)
                     
-                    # Step 3: Generate actual keys
                     private_key, public_key = generate_rsa_keypair()
                     st.session_state.private_key = private_key
                     st.session_state.public_key = public_key
                     
-                    # Step 4: Display keys
                     st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
                     st.write("3️⃣ Keys generated successfully")
                     
@@ -697,29 +667,24 @@ pem_public = public_key.public_bytes(
             
             if st.button("Register") and user_id and st.session_state.public_key:
                 with st.spinner("Registering user..."):
-                    # Register with the API
                     try:
                         registration_result = register_user(user_id, st.session_state.public_key)
                         
-                        # Check if registration was successful
                         if registration_result and registration_result.get("status") == "success":
                             st.success(f"User {user_id} registered successfully!")
                             
-                            # Show what was sent to the server
                             with st.expander("Registration Data Sent"):
                                 st.json({
                                     "user_id": user_id,
                                     "public_key": base64.b64encode(st.session_state.public_key).decode()[:30] + "..." # truncated for display
                                 })
                             
-                            # Automatically login after registration
                             login_result = login_user(user_id, st.session_state.private_key)
                             if login_result and "access_token" in login_result:
                                 st.session_state.logged_in = True
                                 st.session_state.user_id = user_id
                                 st.session_state.token = login_result["access_token"]
                                 
-                                # Fetch user files after successful login
                                 with st.spinner("Loading your files..."):
                                     user_files = get_user_files(st.session_state.token)
                                     st.session_state.files = user_files
@@ -737,13 +702,11 @@ pem_public = public_key.public_bytes(
     else:
         st.success(f"Logged in as: {st.session_state.user_id}")
         
-        # Show key info when logged in
         with st.expander("🔑 Your Encryption Keys"):
             if st.session_state.private_key:
                 st.markdown('<div class="key-box">Private Key Status: LOADED</div>', unsafe_allow_html=True)
                 st.write("Your private key is loaded in session memory")
                 
-                # Show a masked version of the private key
                 key_start = st.session_state.private_key[:100].decode()
                 st.code(f"{key_start}...[REDACTED FOR SECURITY]", language="text")
                 
@@ -761,7 +724,7 @@ pem_public = public_key.public_bytes(
             ["File Upload", "File Management", "Key Rotation", "Audit Trail"]
         )
 
-# Main content
+
 if not st.session_state.logged_in:
     st.markdown('<h1 class="main-header">Secure Cloud Storage Demo</h1>', unsafe_allow_html=True)
     
@@ -790,14 +753,12 @@ if not st.session_state.logged_in:
     st.markdown('<div class="info-box">Please register or login using the sidebar to begin the demo.</div>', unsafe_allow_html=True)
 
 else:
-    # Determine which page to show based on sidebar selection
     if 'demo_page' not in locals():
-        demo_page = "File Upload"  # Default page
+        demo_page = "File Upload"
     
     if demo_page == "File Upload":
         st.markdown('<h1 class="main-header">File Upload Demo</h1>', unsafe_allow_html=True)
         
-        # File upload interface
         st.markdown('<h2 class="section-header">Upload a File</h2>', unsafe_allow_html=True)
         
         with st.expander("📘 How End-to-End Encryption Works", expanded=True):
@@ -829,14 +790,11 @@ else:
             </div>
             """, unsafe_allow_html=True)
             
-            # Encryption process demonstration with status updates
             if st.button("Encrypt & Upload File"):
                 with st.expander("🔒 Encryption Process", expanded=True):
-                    # Common progress tracker for all steps
                     progress_bar = st.progress(0)
                     status_text = st.empty()
                     
-                    # Step 1: Generate data encryption key
                     st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
                     st.subheader("Step 1: Generate Data Encryption Key (DEK)")
                     status_text.write("Generating Data Encryption Key (DEK)...")
@@ -852,7 +810,6 @@ data_key = AESGCM.generate_key(bit_length=256)
                     progress_bar.progress(20)
                     st.markdown('</div>', unsafe_allow_html=True)
                     
-                    # Step 2: Encrypt the file
                     st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
                     st.subheader("Step 2: Encrypt File with AES-GCM")
                     status_text.write("Encrypting file with AES-GCM...")
@@ -876,7 +833,6 @@ ciphertext = aesgcm.encrypt(nonce, file_contents, None)
                     progress_bar.progress(40)
                     st.markdown('</div>', unsafe_allow_html=True)
                     
-                    # Step 3: Wrap the DEK with public key
                     st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
                     st.subheader("Step 3: Wrap DEK with RSA Public Key")
                     status_text.write("Wrapping DEK with RSA public key...")
@@ -903,12 +859,10 @@ wrapped_key = public_key.encrypt(
                     progress_bar.progress(60)
                     st.markdown('</div>', unsafe_allow_html=True)
 
-                    # Step 4: Prepare data for server
                     st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
                     st.subheader("Step 4: Prepare Data for Server")
                     status_text.write("Preparing data package for server...")
                     
-                    # Combine nonce and ciphertext
                     ciphertext_with_nonce = encrypted_data['nonce'] + encrypted_data['ciphertext']
                     
                     st.json({
@@ -932,12 +886,10 @@ wrapped_key = public_key.encrypt(
                     progress_bar.progress(80)
                     st.markdown('</div>', unsafe_allow_html=True)
                     
-                    # Step 5: Upload to server
                     st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
                     st.subheader("Step 5: Upload to Server")
                     status_text.write("Uploading to secure storage...")
                     
-                    # Actual upload operation
                     upload_result = upload_file_to_api(
                         ciphertext_with_nonce,
                         uploaded_file.name, 
@@ -958,9 +910,15 @@ wrapped_key = public_key.encrypt(
                             "server_response": upload_result
                         })
                         
-                        # Store minimal information in session for UI display
                         if 'files' not in st.session_state:
                             st.session_state.files = []
+                        if 'original_uploads' not in st.session_state:
+                            st.session_state.original_uploads = {}
+                        
+                        st.session_state.original_uploads[file_id] = {
+                            'filename': uploaded_file.name,
+                            'upload_time': time.strftime("%Y-%m-%d %H:%M:%S")
+                        }
                         
                         st.session_state.files.append({
                             'file_id': file_id,
@@ -973,7 +931,6 @@ wrapped_key = public_key.encrypt(
                         st.error("Upload failed. See error details above.")
                     st.markdown('</div>', unsafe_allow_html=True)
                     
-                    # Security properties as bonus information - change from nested expander to section
                     st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
                     st.subheader("Security Properties")
                     st.markdown("""
@@ -991,8 +948,6 @@ wrapped_key = public_key.encrypt(
     elif demo_page == "File Management":
         st.markdown('<h1 class="main-header">File Management</h1>', unsafe_allow_html=True)
         
-        # We'll need to fetch the user's files from the API
-        # For now we'll use the session state files for display
         
         with st.expander("📘 How File Operations Work", expanded=True):
             st.write("""
@@ -1021,13 +976,11 @@ wrapped_key = public_key.encrypt(
         else:
             st.markdown('<h2 class="section-header">Your Files</h2>', unsafe_allow_html=True)
             
-            # Create a clearer UI with explicit buttons for each action
             for i, file in enumerate(st.session_state.files):
                 with st.container():
                     st.markdown("---")
                     cols = st.columns([3, 2, 2, 3])
                     
-                    # File information
                     with cols[0]:
                         st.markdown(f"**{file['filename']}**")
                         st.caption(f"ID: {file['file_id'][:8]}...")
@@ -1036,7 +989,6 @@ wrapped_key = public_key.encrypt(
                         st.text(f"{file['size']} bytes")
                         st.caption(f"Uploaded: {file['upload_time']}")
                     
-                    # Action buttons
                     with cols[2]:
                         download_btn = st.button("📥 Download", key=f"download_{i}")
                         update_btn = st.button("🔄 Update", key=f"update_{i}")
@@ -1045,7 +997,6 @@ wrapped_key = public_key.encrypt(
                         delete_btn = st.button("🗑️ Delete", key=f"delete_{i}")
                         view_btn = st.button("👁️ View Details", key=f"view_{i}")
                     
-                    # Process actions based on which button was clicked
                     if download_btn:
                         st.session_state.current_action = {"type": "download", "file_index": i}
                         st.rerun()
@@ -1059,7 +1010,6 @@ wrapped_key = public_key.encrypt(
                         st.session_state.current_action = {"type": "view", "file_index": i}
                         st.rerun()
             
-            # Handle the current action if any
             if 'current_action' in st.session_state and st.session_state.current_action:
                 action = st.session_state.current_action["type"]
                 file_index = st.session_state.current_action["file_index"]
@@ -1070,11 +1020,9 @@ wrapped_key = public_key.encrypt(
                 
                 if action == "download":
                     with st.expander("🔓 Decryption Process", expanded=True):
-                        # Common progress tracker for all steps
                         progress_bar = st.progress(0)
                         status_text = st.empty()
                         
-                        # Step 1: Fetch from server
                         st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
                         st.subheader("Step 1: Retrieve Encrypted Data from Server")
                         status_text.write("Retrieving encrypted data from server...")
@@ -1082,7 +1030,6 @@ wrapped_key = public_key.encrypt(
                         file_data = download_file_from_api(file["file_id"], st.session_state.token)
                         
                         if file_data:
-                            # Decode the data
                             wrapped_dek = base64.b64decode(file_data["wrappedDEK"])
                             ciphertext = base64.b64decode(file_data["ciphertext"])
                             
@@ -1094,11 +1041,9 @@ wrapped_key = public_key.encrypt(
                             progress_bar.progress(25)
                             st.markdown('</div>', unsafe_allow_html=True)
                             
-                            # Extract nonce (first 12 bytes) and ciphertext
                             nonce = ciphertext[:12]
                             ciphertext_data = ciphertext[12:]
                             
-                            # Step 2: Unwrap the DEK
                             st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
                             st.subheader("Step 2: Unwrap DEK with Private Key")
                             status_text.write("Unwrapping DEK with private key...")
@@ -1126,7 +1071,6 @@ data_key = private_key.decrypt(
                             progress_bar.progress(50)
                             st.markdown('</div>', unsafe_allow_html=True)
                             
-                            # Step 3: Decrypt the file
                             st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
                             st.subheader("Step 3: Decrypt File with DEK")
                             status_text.write("Decrypting file with DEK...")
@@ -1140,7 +1084,6 @@ plaintext = aesgcm.decrypt(nonce, ciphertext_data, None)
                             time.sleep(0.5)  # Visual delay
                             decrypted_data = decrypt_file(data_key, nonce, ciphertext_data)
                             
-                            # Determine if text or binary and show preview
                             try:
                                 preview = decrypted_data[:200].decode('utf-8')
                                 preview_type = "text"
@@ -1153,13 +1096,11 @@ plaintext = aesgcm.decrypt(nonce, ciphertext_data, None)
                             st.code(preview, language="text" if preview_type == "text" else None)
                             st.markdown('</div>', unsafe_allow_html=True)
                             
-                            # Step 4: Save the file
                             st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
                             st.subheader("Step 4: Save Decrypted File")
                             status_text.write("Preparing file for download...")
                             progress_bar.progress(100)
                             
-                            # Offer download button
                             download_decrypted_btn = st.download_button(
                                 "📥 Download Decrypted File",
                                 data=decrypted_data,
@@ -1178,7 +1119,6 @@ plaintext = aesgcm.decrypt(nonce, ciphertext_data, None)
                         else:
                             st.error("Failed to download the file. See errors above.")
                     
-                    # Back button
                     if st.button("⬅️ Back to File List", key="back_from_download"):
                         st.session_state.current_action = None
                         st.rerun()
@@ -1197,14 +1137,11 @@ plaintext = aesgcm.decrypt(nonce, ciphertext_data, None)
                         new_file = st.file_uploader("Upload new version", key=f"new_version_{file['file_id']}")
                         
                         if new_file:
-                            # Get new file contents
                             new_content = new_file.read()
                             
-                            # Common progress tracker for all steps
                             progress_bar = st.progress(0)
                             status_text = st.empty()
                             
-                            # Step 1: Generate new DEK
                             st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
                             st.subheader("Step 1: Generate New Encryption Key")
                             status_text.write("Generating new Data Encryption Key (DEK)...")
@@ -1213,7 +1150,6 @@ plaintext = aesgcm.decrypt(nonce, ciphertext_data, None)
                             progress_bar.progress(20)
                             st.markdown('</div>', unsafe_allow_html=True)
                             
-                            # Step 2: Encrypt with new DEK
                             st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
                             st.subheader("Step 2: Encrypt New Version")
                             status_text.write("Encrypting file with new key...")
@@ -1223,7 +1159,6 @@ plaintext = aesgcm.decrypt(nonce, ciphertext_data, None)
                             progress_bar.progress(40)
                             st.markdown('</div>', unsafe_allow_html=True)
                             
-                            # Step 3: Wrap new DEK
                             st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
                             st.subheader("Step 3: Wrap DEK with Public Key")
                             status_text.write("Wrapping DEK with public key...")
@@ -1232,7 +1167,6 @@ plaintext = aesgcm.decrypt(nonce, ciphertext_data, None)
                             progress_bar.progress(60)
                             st.markdown('</div>', unsafe_allow_html=True)
                             
-                            # Step 4: Prepare data for server
                             st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
                             st.subheader("Step 4: Prepare Data for Server")
                             status_text.write("Preparing data for server...")
@@ -1251,7 +1185,6 @@ plaintext = aesgcm.decrypt(nonce, ciphertext_data, None)
                             progress_bar.progress(80)
                             st.markdown('</div>', unsafe_allow_html=True)
                             
-                            # Step 5: Send update to server
                             st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
                             st.subheader("Step 5: Send Update to Server")
                             
@@ -1270,15 +1203,19 @@ plaintext = aesgcm.decrypt(nonce, ciphertext_data, None)
                                     progress_bar.progress(100)
                                     status_text.write("Update complete!")
                                     
-                                    # Add update event to audit log
+                                    original_filename = st.session_state.original_uploads[file["file_id"]]["filename"]
+                                    
                                     st.session_state.audit_events.append({
                                         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
                                         "operation": "UPDATE",
                                         "file_id": file["file_id"],
-                                        "details": f"File updated: {new_file.name}"
+                                        "details": {
+                                            "old_filename": original_filename,
+                                            "new_filename": new_file.name,
+                                            "action": "File updated"
+                                        }
                                     })
                                     
-                                    # Update session state for display purposes
                                     st.session_state.files[file_index].update({
                                         'filename': new_file.name,
                                         'size': len(new_content),
@@ -1292,7 +1229,6 @@ plaintext = aesgcm.decrypt(nonce, ciphertext_data, None)
                                 else:
                                     st.error("Failed to update the file. See errors above.")
                     
-                    # Back button
                     if st.button("⬅️ Back to File List", key="back_from_update"):
                         st.session_state.current_action = None
                         st.rerun()
@@ -1301,7 +1237,6 @@ plaintext = aesgcm.decrypt(nonce, ciphertext_data, None)
                     with st.expander("🗑️ Secure Deletion Process", expanded=True):
                         st.warning("Are you sure you want to delete this file? This cannot be undone.")
                         
-                        # Explanation of the process
                         st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
                         st.subheader("Deletion Process and Security")
                         st.markdown("""
@@ -1319,7 +1254,6 @@ plaintext = aesgcm.decrypt(nonce, ciphertext_data, None)
                         """)
                         st.markdown('</div>', unsafe_allow_html=True)
                         
-                        # Confirmation buttons
                         cols = st.columns(2)
                         with cols[0]:
                             if st.button("⬅️ Cancel", key="cancel_delete"):
@@ -1328,11 +1262,9 @@ plaintext = aesgcm.decrypt(nonce, ciphertext_data, None)
                                 
                         with cols[1]:
                             if st.button("🗑️ Confirm Delete", key="confirm_delete"):
-                                # Progress tracker
                                 progress_bar = st.progress(0)
                                 status_text = st.empty()
                                 
-                                # Step 1: Send deletion request
                                 st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
                                 st.subheader("Step 1: Request Deletion from Server")
                                 status_text.write("Removing file from server...")
@@ -1342,12 +1274,10 @@ plaintext = aesgcm.decrypt(nonce, ciphertext_data, None)
                                 progress_bar.progress(60)
                                 
                                 if delete_result and delete_result.get("status") == "success":
-                                    # Step 2: Update audit log
                                     st.subheader("Step 2: Record Deletion in Audit Log")
                                     progress_bar.progress(80)
                                     status_text.write("Recording deletion in audit log...")
                                     
-                                    # Add deletion event to audit log
                                     st.session_state.audit_events.append({
                                         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
                                         "operation": "DELETE",
@@ -1355,11 +1285,9 @@ plaintext = aesgcm.decrypt(nonce, ciphertext_data, None)
                                         "details": f"File deleted: {file['filename']}"
                                     })
                                     
-                                    # Step 3: Cleanup
                                     progress_bar.progress(100)
                                     status_text.write("Deletion complete!")
                                     
-                                    # Remove from session state
                                     st.session_state.files.pop(file_index)
                                     
                                     st.success(f"File {file['file_id']} deleted successfully")
@@ -1373,7 +1301,6 @@ plaintext = aesgcm.decrypt(nonce, ciphertext_data, None)
                                     st.markdown('</div>', unsafe_allow_html=True)
                 
                 elif action == "view":
-                    # Display file details
                     st.json({
                         "file_id": file["file_id"],
                         "filename": file["filename"],
@@ -1419,11 +1346,9 @@ plaintext = aesgcm.decrypt(nonce, ciphertext_data, None)
             
             if st.button("Start Key Rotation"):
                 with st.expander("🔄 Key Rotation Process", expanded=True):
-                    # Common progress tracker for all steps
                     progress_bar = st.progress(0)
                     status_text = st.empty()
                     
-                    # Step 1: Generate new keypair
                     st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
                     st.subheader("Step 1: Generate New RSA Keypair")
                     status_text.write("Generating new 2048-bit RSA keypair...")
@@ -1447,7 +1372,6 @@ pem_private = private_key.private_bytes(
                     
                     new_private_key, new_public_key = generate_rsa_keypair()
                     
-                    # Show only a preview of the keys
                     st.markdown('<div class="key-box">New Private Key (preview):</div>', unsafe_allow_html=True)
                     st.code(new_private_key[:100].decode() + "...", language="text")
                     
@@ -1457,7 +1381,6 @@ pem_private = private_key.private_bytes(
                     progress_bar.progress(25)
                     st.markdown('</div>', unsafe_allow_html=True)
                     
-                    # Step 2: Send public key to server
                     st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
                     st.subheader("Step 2: Send Public Key to Server")
                     status_text.write("Sending new public key to server...")
@@ -1475,7 +1398,6 @@ response = requests.post(
                     progress_bar.progress(50)
                     st.markdown('</div>', unsafe_allow_html=True)
                     
-                    # Step 3: Server processes keys
                     st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
                     st.subheader("Step 3: Server Rekeys Files")
                     status_text.write("Server is re-encrypting file keys...")
@@ -1487,15 +1409,12 @@ for each file owned by the user:
     2. Decrypt it with the server's master key
     3. Re-encrypt it with the user's new public key
     4. Update the stored wrapped DEK
-    5. Update the user's public key in the database
-                    """, language="text")
+    5. Update the user's public key in the database                    """, language="text")
                     
-                    # Show simulated progress for server-side operations
                     time.sleep(0.5)
                     progress_bar.progress(75)
                     st.markdown('</div>', unsafe_allow_html=True)
                     
-                    # Step 4: Confirm rotation and update local keys 
                     st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
                     st.subheader("Step 4: Complete Key Rotation")
                     status_text.write("Finalizing key rotation...")
@@ -1509,7 +1428,6 @@ for each file owned by the user:
                             "old_key_retired": True
                         })
                         
-                        # Update session state
                         st.session_state.private_key = new_private_key
                         st.session_state.public_key = new_public_key
                         
@@ -1567,16 +1485,12 @@ for each file owned by the user:
         
         st.markdown('<h2 class="section-header">Audit Log Entries</h2>', unsafe_allow_html=True)
         
-        # Generate sample audit log based on session activities
         audit_logs = []
+
+        timestamp_base = time.time()
         
-        # Base timestamp for first entry
-        timestamp_base = time.time() - (len(st.session_state.files) * 300)  
-        
-        # Genesis hash for first entry
         prev_hash = "0" * 64
         
-        # Add user registration as first entry
         first_entry = {
             "id": 1,
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(timestamp_base - 600)),
@@ -1586,7 +1500,6 @@ for each file owned by the user:
             "prev_hash": prev_hash
         }
         
-        # Compute hash for the first entry
         log_data = {
             'timestamp': first_entry['timestamp'],
             'operation': first_entry['operation'],
@@ -1596,71 +1509,45 @@ for each file owned by the user:
         first_entry["current_hash"] = compute_hash_for_log_entry(prev_hash, log_data)
         audit_logs.append(first_entry)
         
-        # Use the real hash for the next entry
         prev_hash = first_entry["current_hash"]
         
-        # Add file operations to audit log
-        for i, file in enumerate(st.session_state.files):
-            # Extract timestamp or use relative time
-            try:
-                file_timestamp = file["upload_time"]
-            except:
-                file_timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(timestamp_base + (i * 300)))
-            
-            # Create entry
+        all_events = []
+        
+        for file_id, upload_info in st.session_state.original_uploads.items():
+            all_events.append({
+                "timestamp": upload_info['upload_time'],
+                "operation": "UPLOAD",
+                "file_id": file_id,
+                "details": {"filename": upload_info['filename']}
+            })
+        
+        all_events.extend(st.session_state.audit_events)
+        
+        all_events.sort(key=lambda x: x["timestamp"])
+        
+        for event in all_events:
             entry = {
                 "id": len(audit_logs) + 1,
-                "timestamp": file_timestamp,
+                "timestamp": event["timestamp"],
                 "user_id": st.session_state.user_id,
-                "operation": "upload",
-                "file_id": file["file_id"],
-                "details": f"File uploaded: {file['filename']}",
+                "operation": event["operation"],
+                "file_id": event["file_id"],
+                "details": event["details"],
                 "prev_hash": prev_hash
             }
             
-            # Compute hash for this entry
             log_data = {
                 'timestamp': entry['timestamp'],
                 'operation': entry['operation'],
                 'user_id': entry['user_id'],
-                'file_id': entry['file_id']
+                'file_id': entry.get('file_id', '')
             }
             entry["current_hash"] = compute_hash_for_log_entry(prev_hash, log_data)
             audit_logs.append(entry)
             
-            # Update prev_hash for next entry
             prev_hash = entry["current_hash"]
         
-        # Add real tracked download events
-        for i, event in enumerate(st.session_state.audit_events):
-            if event["operation"] in ["DOWNLOAD", "UPDATE", "DELETE"]:
-                # Create entry
-                entry = {
-                    "id": len(audit_logs) + 1,
-                    "timestamp": event["timestamp"],
-                    "user_id": st.session_state.user_id,
-                    "operation": event["operation"],
-                    "file_id": event["file_id"],
-                    "details": event["details"],
-                    "prev_hash": prev_hash
-                }
-                
-                # Compute hash for this entry
-                log_data = {
-                    'timestamp': entry['timestamp'] or time.strftime("%Y-%m-%d %H:%M:%S"),  # Ensure timestamp isn't empty
-                    'operation': entry['operation'],
-                    'user_id': entry['user_id'],
-                    'file_id': entry.get('file_id', '')
-                }
-                entry["current_hash"] = compute_hash_for_log_entry(prev_hash, log_data)
-                audit_logs.append(entry)
-                
-                # Update prev_hash for next entry
-                prev_hash = entry["current_hash"]
-        
-        # Display audit log
         if audit_logs:
-            # Add a filter for operations
             operation_filter = st.selectbox(
                 "Filter by Operation",
                 ["All Operations", "REGISTER", "UPLOAD", "DOWNLOAD", "UPDATE", "DELETE", "KEY_ROTATION"]
@@ -1668,10 +1555,8 @@ for each file owned by the user:
             
             filtered_logs = audit_logs
             if operation_filter != "All Operations":
-                # Convert operation to lowercase for comparison with log entries
                 filtered_logs = [log for log in audit_logs if log["operation"].upper() == operation_filter]
             
-            # Create a custom formatted display
             for log in filtered_logs:
                 with st.container():
                     cols = st.columns([1, 3, 2, 2, 3])
@@ -1704,9 +1589,17 @@ for each file owned by the user:
                             st.text("")
                     
                     with cols[4]:
-                        st.text(log.get("details", ""))
+                        if isinstance(log.get("details"), dict):
+                            details = log["details"]
+                            if "old_filename" in details and "new_filename" in details:
+                                st.markdown(f"<span style='color:#FF9800;'>Changed from '{details['old_filename']}' to '{details['new_filename']}'</span>", unsafe_allow_html=True)
+                            elif "filename" in details:
+                                st.markdown(f"<span style='color:#4CAF50;'>'{details['filename']}'</span>", unsafe_allow_html=True)
+                            else:
+                                st.text(json.dumps(details))
+                        else:
+                            st.text(log.get("details", ""))
                     
-                    # Show hash details on hover/expansion
                     with st.expander("Show Hash Chain Details"):
                         hash_cols = st.columns(2)
                         
@@ -1716,7 +1609,6 @@ for each file owned by the user:
                         with hash_cols[1]:
                             st.markdown(f"<div class='key-box'>Current Hash: {log['current_hash'][:16]}...</div>", unsafe_allow_html=True)
                             
-                        # Add detailed JSON representation of the entry
                         st.markdown("### Complete Entry Data")
                         st.json({
                             "id": log["id"],
@@ -1745,14 +1637,11 @@ current_hash = sha256(data_string.encode()).hexdigest()
                     
                     st.markdown("---")
             
-            # Verify integrity
             if st.button("Verify Audit Log Integrity"):
                 with st.expander("🔒 Audit Log Verification Process", expanded=True):
-                    # Common progress tracker for all steps
                     progress_bar = st.progress(0)
                     status_text = st.empty()
                     
-                    # Step 1: Initialize verification
                     st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
                     st.subheader("Step 1: Initialize Verification Process")
                     status_text.write("Starting hash chain verification...")
@@ -1760,7 +1649,6 @@ current_hash = sha256(data_string.encode()).hexdigest()
                     total_entries = len(audit_logs)
                     st.info(f"Total entries to verify: {total_entries}")
                     
-                    # Show the genesis entry (first entry)
                     genesis_entry = audit_logs[0]
                     st.markdown(f'<div class="key-box">Genesis Entry (ID: {genesis_entry["id"]})</div>', unsafe_allow_html=True)
                     st.json({
@@ -1773,60 +1661,49 @@ current_hash = sha256(data_string.encode()).hexdigest()
                     })
                     
                     progress_bar.progress(10)
-                    time.sleep(0.5)  # Visual delay
+                    time.sleep(0.5)
                     st.markdown('</div>', unsafe_allow_html=True)
                     
-                    # Step 2: Verify hash chain
                     st.markdown('<div class="crypto-step">', unsafe_allow_html=True)
                     st.subheader("Step 2: Verify Hash Chain Integrity")
                     status_text.write("Verifying each entry in the chain...")
                     
-                    # Track verification results
                     verification_passed = True
                     failures = []
                     
-                    # Show verification process with sample entries
-                    sample_indices = [1]  # Start with the second entry (after genesis)
+                    sample_indices = [1]
                     
-                    # Add some samples from the middle and end if enough entries
                     if total_entries > 5:
-                        sample_indices.append(total_entries // 2)  # Middle
-                        sample_indices.append(total_entries - 1)   # Last entry
+                        sample_indices.append(total_entries // 2)
+                        sample_indices.append(total_entries - 1)
                     elif total_entries > 1:
-                        sample_indices.append(total_entries - 1)   # Last entry
+                        sample_indices.append(total_entries - 1)
                     
-                    # Detailed verification for sample entries
                     for sample_idx in sample_indices:
                         if sample_idx < len(audit_logs):
                             entry = audit_logs[sample_idx]
                             prev_entry = audit_logs[sample_idx - 1]
                             
-                            # Progress update
                             prog_pct = min(100, 10 + ((sample_idx / max(1, len(sample_indices))) * 40))
                             progress_bar.progress(int(prog_pct))
                             status_text.write(f"Verifying sample entry {sample_idx+1} of {total_entries}...")
                             
-                            # Display entry details
                             st.markdown(f'<div class="data-box">Verifying Entry ID: {entry["id"]}</div>', unsafe_allow_html=True)
                             
-                            # Show the hash computation process
                             st.markdown("**Hash computation steps:**")
                             
-                            # 1. Get previous hash
                             st.code(f"""
 # Step 1: Get the previous entry's hash
 prev_hash = "{prev_entry['current_hash']}"
                             """, language="python")
                             
-                            # 2. Format the current entry data
                             log_data = {
-                                'timestamp': entry['timestamp'] or time.strftime("%Y-%m-%d %H:%M:%S"),  # Ensure timestamp isn't empty
+                                'timestamp': entry['timestamp'] or time.strftime("%Y-%m-%d %H:%M:%S"),
                                 'operation': entry['operation'],
                                 'user_id': entry['user_id'],
                                 'file_id': entry.get('file_id', '')
                             }
                             
-                            # Show the data used for hash computation
                             file_id_display = log_data['file_id'] if log_data['file_id'] else "(empty)"
                             st.code(f"""
 # Step 2: Format data from current entry
@@ -1839,14 +1716,12 @@ file_id = "{file_id_display}"
 data_string = timestamp + operation + user_id + file_id
                             """, language="python")
                             
-                            # 3. Combine with previous hash and compute new hash
                             st.code(f"""
 # Step 3: Combine with previous hash and compute SHA-256
 hash_input = prev_hash + data_string
 computed_hash = hashlib.sha256(hash_input.encode()).hexdigest()
                             """, language="python")
                             
-                            # 4. Actually compute the hash and compare
                             computed_hash = compute_hash_for_log_entry(prev_entry['current_hash'], log_data)
                             matches = computed_hash == entry['current_hash']
                             
@@ -1868,7 +1743,6 @@ computed_hash = hashlib.sha256(hash_input.encode()).hexdigest()
                                 verification_passed = False
                                 failures.append(entry["id"])
                                 
-                                # Show detailed debugging info for mismatches - replace expander with collapsible section
                                 st.warning("Hash computation details:")
                                 st.json({
                                     "prev_hash": prev_entry['current_hash'],
@@ -1882,47 +1756,38 @@ computed_hash = hashlib.sha256(hash_input.encode()).hexdigest()
                                     "stored_hash": entry['current_hash']
                                 })
                             
-                            # Add a separator between samples
                             if sample_idx != sample_indices[-1]:
                                 st.markdown("---")
                     
-                    # Verify all entries in the background without showing details again
                     status_text.write("Completing verification of all entries...")
                     verification_progress = st.progress(0)
                     
-                    # Start second phase of verification from 50%
                     start_progress = 50
                     
                     for i in range(1, len(audit_logs)):
-                        # Update progress for background verification
                         progress_percent = min(100, start_progress + (i / max(1, len(audit_logs))) * (90 - start_progress))
                         verification_progress.progress(int(progress_percent))
                         
                         entry = audit_logs[i]
                         prev_entry = audit_logs[i-1]
                         
-                        # Compute hash for this entry
                         log_data = {
-                            'timestamp': entry['timestamp'] or time.strftime("%Y-%m-%d %H:%M:%S"),  # Ensure timestamp isn't empty
+                            'timestamp': entry['timestamp'] or time.strftime("%Y-%m-%d %H:%M:%S"),
                             'operation': entry['operation'],
                             'user_id': entry['user_id'],
                             'file_id': entry.get('file_id', '')
                         }
                         computed_hash = compute_hash_for_log_entry(prev_entry['current_hash'], log_data)
                         
-                        # Check if hash matches
                         if computed_hash != entry['current_hash'] and entry["id"] not in failures:
                             verification_passed = False
                             failures.append(entry["id"])
                     
-                    # Final progress update
                     verification_progress.progress(100)
                     progress_bar.progress(90)
                     
-                    # Show summary of verification results
                     st.subheader("Step 3: Verification Summary")
                     
-                    # Show final results
                     if verification_passed:
                         st.success(f"✅ All {total_entries} entries verified successfully! The audit log integrity is confirmed.")
                         st.markdown("""
@@ -1943,9 +1808,6 @@ computed_hash = hashlib.sha256(hash_input.encode()).hexdigest()
                     progress_bar.progress(100)
                     st.markdown('</div>', unsafe_allow_html=True)
                 
-                # End the main verification expander before showing the tamper explanation
-                
-                # Show what happens if tampered - now outside the main verification expander
                 st.subheader("Understanding Tampering Detection")
                 with st.expander("What if someone tampers with the audit log?"):
                     st.markdown("""
